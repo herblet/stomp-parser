@@ -1,5 +1,5 @@
 [package]
-name = "stomp_parser"
+name = "stomp-parser"
 version = "0.1.0"
 authors = ["Tobias Grasl <herblet@knowledge42.com>"]
 edition = "2018"
