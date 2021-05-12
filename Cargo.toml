@@ -1,7 +1,7 @@
 [package]
 name = "stomp_parser"
 version = "0.1.0"
-authors = ["Tobias Grasl <toby@meliorbis.com>"]
+authors = ["Tobias Grasl <herblet@knowledge42.com>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
