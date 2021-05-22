@@ -1,8 +1,11 @@
 [package]
 name = "stomp-parser"
-version = "0.1.0"
-authors = ["Tobias Grasl <herblet@knowledge42.com>"]
+version = "0.2.0"
+authors = ["Toby Grasl <herblet@knowledge42.com>"]
 edition = "2018"
+description = "A crate for parsing Stomp frames, implemented using nom."
+homepage = "https://github.com/herblet/stomp-parser"
+license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
