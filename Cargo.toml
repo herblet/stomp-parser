@@ -4,6 +4,7 @@ version = "0.2.0"
 authors = ["Toby Grasl <herblet@knowledge42.com>"]
 edition = "2018"
 description = "A crate for parsing Stomp frames, implemented using nom."
+repository = "https://github.com/herblet/stomp-parser"
 homepage = "https://github.com/herblet/stomp-parser"
 license = "MIT"
 
