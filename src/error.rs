@@ -1,3 +1,4 @@
+//! Defines error types used and returned by this package.
 use std::convert::Into;
 
 use nom::error::{ContextError, FromExternalError, ParseError, VerboseError};

@@ -1,4 +1,3 @@
-#[macro_export]
 macro_rules! header_display {
     ( $type1:ty ) => {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
@@ -6,7 +5,6 @@ macro_rules! header_display {
         }
     };
 }
-#[macro_export]
 macro_rules! header {
 
     ( $header:ident, $name:expr, $types:ty ) => {
@@ -49,8 +47,6 @@ macro_rules! header {
         }
     };
 }
-
-#[macro_export]
 macro_rules! headers {
         ( $( ($header:ident, $name:literal ,$types:ty ) ),*  ) => {
 
@@ -124,9 +120,9 @@ macro_rules! headers {
             $(
                 header!($header, $name ,$types );
 
-                pub fn [<parse_ $header _header>](input: String) -> Result<Header, StompParseError> {
-                    [<$header Value>]::from_str(&input).map(Header::$header)
-                }
+                // fn [<parse_ $header _header>](input: String) -> Result<Header, StompParseError> {
+                //     [<$header Value>]::from_str(&input).map(Header::$header)
+                // }
             )*
 
                 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -137,6 +133,7 @@ macro_rules! headers {
                     Custom(CustomValue)
                 }
 
+                #[doc(hidden)]
                 pub mod parser {
                     #![allow(non_snake_case)]
 

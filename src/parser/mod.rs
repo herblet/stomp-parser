@@ -13,6 +13,10 @@ use std::str;
 use crate::error::FullError;
 use crate::error::StompParseError;
 
+pub trait HasBody {
+    fn set_raw(&mut self, bytes: Vec<u8>);
+}
+
 /// A Parser which holds keyword -> parser maps, and applies the later when the former is
 /// encountered
 pub struct Switch<'a, KP, O, E, E2>
@@ -138,7 +142,7 @@ mod tests {
                         StompVersion::V1_2,
                         StompVersion::Unknown("funk".to_string())
                     ]),
-                    *frame.accepted_versions.value()
+                    *frame.accept_version.value()
                 );
                 assert_eq!("b", *frame.host.value());
                 assert_eq!(None, frame.login);

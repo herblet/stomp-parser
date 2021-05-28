@@ -4,8 +4,9 @@ mod macros;
 #[allow(non_snake_case)]
 #[allow(unused_parens)]
 #[allow(clippy::new_without_default)]
-/// The `client` module defines the model for the frames that a STOMP client can send, as specified in the [STOMP Protocol Spezification,Version 1.2](https://stomp.github.io/stomp-specification-1.2.html).
 pub mod client {
+    //! Implements the model for the frames that a STOMP client can send, as specified in
+    //! the [STOMP Protocol Spezification,Version 1.2](https://stomp.github.io/stomp-specification-1.2.html).
 
     use crate::model::headers::*;
 
@@ -49,8 +50,9 @@ pub mod client {
             CONNECT|STOMP,
             Client,
             host: Host,
-            accepted_versions: AcceptVersion,
-            (heartbeat: HeartBeat: (||HeartBeatValue::new(HeartBeatIntervalls::new(0,0))),login: Login, passcode: Passcode)
+            accept_version: AcceptVersion,
+            (heartbeat: HeartBeat: (||HeartBeatValue::new(HeartBeatIntervalls::new(0,0))):"(0,0)",login: Login, passcode: Passcode),
+            "See [CONNECT Frame](https://stomp.github.io/stomp-specification-1.2.html#CONNECT_or_STOMP_Frame)."
         ),
         (
             Disconnect,
@@ -91,7 +93,7 @@ pub mod client {
             destination: Destination,
             id: Id,
             (
-                ack_type: Ack: (||AckValue::new(AckType::Auto)),
+                ack_type: Ack: (||AckValue::new(AckType::Auto)):"Auto",
                 receipt: Receipt
             ),
             [custom: cus]
@@ -113,8 +115,9 @@ pub mod client {
 #[allow(unused_parens)]
 #[allow(clippy::new_without_default)]
 pub mod server {
+    //! Implements the model for the frames that a STOMP server can send, as specified in the
+    //! [STOMP Protocol Spezification,Version 1.2](https://stomp.github.io/stomp-specification-1.2.html).
     use crate::model::headers::*;
-
     frames! {
         Server,
         (
@@ -156,10 +159,7 @@ pub mod server {
 
     impl ErrorFrame {
         pub fn from_message(message: &str) -> Self {
-            let raw = message.as_bytes().to_owned();
-            let mut frame = ErrorFrame::new(Vec::<CustomValue>::new(), (0, raw.len()));
-            frame.set_raw(raw);
-            frame
+            ErrorFrame::new(Vec::<CustomValue>::new(), message.as_bytes().to_owned())
         }
     }
 }
@@ -181,7 +181,7 @@ mod test {
         );
 
         if let Ok(ClientFrame::Connect(frame)) = result {
-            assert_eq!(StompVersion::V1_1, frame.accepted_versions.value().0[0])
+            assert_eq!(StompVersion::V1_1, frame.accept_version.value().0[0])
         } else {
             panic!("Expected a connect frame")
         }
@@ -211,15 +211,14 @@ mod test {
     fn writes_message_frame() {
         let body = b"Lorem ipsum dolor sit amet,".to_vec();
 
-        let mut frame = MessageFrame::new(
+        let frame = MessageFrame::new(
             MessageIdValue::new("msg-1".to_owned()),
             DestinationValue::new("path/to/hell".to_owned()),
             SubscriptionValue::new("annual".to_owned()),
             Some(ContentTypeValue::new("foo/bar".to_owned())),
             None,
-            (0, body.len()),
+            body,
         );
-        frame.set_raw(body);
 
         let displayed = frame.to_string();
 
@@ -233,5 +232,24 @@ mod test {
             Lorem ipsum dolor sit amet,\u{00}",
             displayed
         );
+    }
+
+    #[test]
+    fn parses_send_frame() {
+        let message = b"SEND\n\
+            destination:path/to/hell\n\
+            content-type:foo/bar\n\
+            \n\
+            Lorem ipsum dolor sit amet,\x00"
+            .to_vec();
+
+        if let Ok(ClientFrame::Send(frame)) = ClientFrame::try_from(message) {
+            assert_eq!(
+                "Lorem ipsum dolor sit amet,",
+                std::str::from_utf8(frame.body().unwrap()).unwrap()
+            );
+        } else {
+            panic!("Send Frame not parsed correctly");
+        }
     }
 }

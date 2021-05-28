@@ -1,7 +1,6 @@
 #![doc(hidden)]
 /// This macro is useful for forcing repeat expression - particularly optional
 /// items - without actually outputting anything depending on the input.
-#[macro_export]
 macro_rules! blank {
     ($in:ident) => {};
 }
@@ -16,7 +15,6 @@ macro_rules! true_if_present {
     };
 }
 
-#[macro_export]
 macro_rules! choose_from_presence {
     ($in:tt $present:tt, $absent:tt) => {
         $present
@@ -27,15 +25,22 @@ macro_rules! choose_from_presence {
     };
 }
 
-#[macro_export]
 macro_rules! frame {
-    ( $name:ident, $command:ident, $origin:ident $(, $header_name:ident : $header_type:ident )* $(,( $(  $opt_header_name:ident : $opt_header_type:ident $(: $opt_header_default:tt)? ),* ))? $(,[custom: $has_custom:ident])? $(,[body: $has_body:ident])? ) => {
+    ( $name:ident,  $($comment:literal,)? $command:ident, $origin:ident $(, $header_name:ident : $header_type:ident )* $(,( $(  $opt_header_name:ident : $opt_header_type:ident $(: $opt_header_default:tt $(: $opt_header_default_comment:literal)?)?  ),* ))? $(,[custom: $has_custom:ident])? $(,[body: $has_body:ident])?  $(,$long_comment:literal)*) => {
         paste::paste! {
+            $(#[doc = ""$comment]
+            #[doc = ""])?
+            #[doc = "This frame has required headers "$("`"$header_name"`")","* $(" and optional headers " $("`"$opt_header_name"`")","* )?"."]
+            $(#[doc = ""]
+            #[doc = ""$long_comment])?
             pub struct $name {
             $(
+                #[doc = "The value of the `"$header_name"` header."]
                 pub $header_name: [<$header_type Value>],
             )*
             $($(
+                #[doc = "The value of the `"$opt_header_name"` header."]
+                $($(#[doc = "Defaults to `"$opt_header_default_comment"` if not supplied."])?)?
                 pub $opt_header_name: choose_from_presence!($($opt_header_default)? [<$opt_header_type Value>],(Option<[<$opt_header_type Value>]>)),
             )*)?
             $(
@@ -57,7 +62,8 @@ macro_rules! frame {
 
         impl $name {
             const NAME: &'static str = stringify!($command);
-            pub fn new( $(
+            #[doc = "Creates a new" $name"."]
+            fn from_parsed( $(
                 $header_name: [<$header_type Value>],
             )* $($(
                 $opt_header_name: Option<[<$opt_header_type Value>]>,
@@ -89,14 +95,37 @@ macro_rules! frame {
 
             }
 
-                /// _bytes may be unused, in which case it will be dropped
-                pub fn set_raw(&mut self, _bytes: Vec<u8>) {
+            pub fn new( $(
+                $header_name: [<$header_type Value>],
+            )* $($(
+                $opt_header_name: Option<[<$opt_header_type Value>]>,
+            )*)? $(
+                $has_custom: Vec<CustomValue>,
+            )? $(
+                $has_body: Vec<u8>,
+            )?
+         )  -> Self {
+                $name {
                     $(
-                        blank!($has_body);
-                        // $has_body
-                    self.raw = Some(_bytes);
+                        $header_name,
+                    )*
+                    $($(
+                        $opt_header_name: choose_from_presence!($(($opt_header_default))? ($opt_header_name.unwrap_or_else($($opt_header_default)?)),($opt_header_name)),
+                    )*)?
+                    $(
+                        $has_custom: (),
+                        custom: $has_custom,
                     )?
+                    $(
+                        $has_body: (),
+                        body_offset_length: (0,$has_body.len()),
+                        raw: Some($has_body),
+                    )?
+
+                    dummy_private: ()
                 }
+
+            }
                 $(
                      blank!($has_body);
                 pub fn body(&self) -> Option<&[u8]> {
@@ -107,6 +136,16 @@ macro_rules! frame {
                 }
             )?
         }
+
+        $(blank!($has_body);
+        impl crate::parser::HasBody for $name {
+                /// Sets the vector containing the bytes of the body
+                fn set_raw(&mut self, bytes: Vec<u8>) {
+                    self.raw = Some(bytes);
+                }
+            }
+        )?
+
 
         impl std::fmt::Display for $name {
              fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
@@ -131,7 +170,6 @@ macro_rules! frame {
     }
 }
 
-#[macro_export]
 macro_rules! frame_parser {
     ( $name:ident, $origin:ident $(, $header_name:ident : $header_type:ident )* $(,( $(  $opt_header_name:ident : $opt_header_type:ident ),* ))? $(,[custom: $has_custom:ident])? $(,[body: $has_body:ident])? ) => {
         paste::paste! {
@@ -194,7 +232,7 @@ macro_rules! frame_parser {
                                     unsafe { (x.1.as_ptr().offset_from(base_offset), x.1.len()) };
                                     )?
 
-                                Ok([<$origin Frame>]::$name([<$name Frame>]::new(
+                                Ok([<$origin Frame>]::$name([<$name Frame>]::from_parsed(
                                     $(
                                         $header_name.ok_or_else(|| StompParseError::new(format!("Missing required header of type: {:?}",HeaderType::$header_type)))?,
                                     )*
@@ -221,11 +259,10 @@ macro_rules! frame_parser {
     };
 }
 
-#[macro_export]
 macro_rules! frames {
     { $group_name:ident,
         $(
-            ( $name:ident, $($comment:literal,)? $command:ident$(|$alias:ident)*, $origin:ident $(, $header_name:ident : $header_type:ident )* $(,( $(  $opt_header_name:ident : $opt_header_type:ident $(: $opt_header_default:tt)?),* ))? $(,[custom: $has_custom:ident])? $(,[body: $has_body:ident])? )
+            ( $name:ident, $($comment:literal,)? $command:ident$(|$alias:ident)*, $origin:ident $(, $header_name:ident : $header_type:ident )* $(,( $(  $opt_header_name:ident : $opt_header_type:ident $(: $opt_header_default:tt$(: $opt_header_default_comment:literal)?)?),* ))? $(,[custom: $has_custom:ident])? $(,[body: $has_body:ident])? $(,$long_comment:literal)* )
         ),+
     } => {
         use crate::error::StompParseError;
@@ -235,12 +272,14 @@ macro_rules! frames {
             $(
                 frame! (
                     [<$name Frame>],
+                    $($comment,)?
                     $command,
                     $group_name
                     $(, $header_name : $header_type )*
-                    $(,( $(  $opt_header_name : $opt_header_type $(: $opt_header_default)? ),* ))?
+                    $(,( $(  $opt_header_name : $opt_header_type $(: $opt_header_default $(: $opt_header_default_comment)?)? ),* ))?
                     $(,[custom: $has_custom])?
                     $(,[body: $has_body])?
+                    $(,$long_comment)?
                 );
             )+
 
@@ -254,12 +293,13 @@ macro_rules! frames {
                 ),+
             }
 
-            impl [<$group_name Frame>] {
-                pub fn set_raw(&mut self, bytes: Vec<u8>) {
+            impl crate::parser::HasBody for [<$group_name Frame>] {
+                fn set_raw(&mut self, bytes: Vec<u8>) {
                     match self {
                         $(
-                            [<$group_name Frame>]::$name(frame) => {frame.set_raw(bytes);}
+                            $([<$group_name Frame>]::$name(frame) => { blank!($has_body); frame.set_raw(bytes);})?
                         )+
+                        _ => { /* Frames with no body do nothing */ }
                     }
                 }
             }
@@ -275,7 +315,7 @@ macro_rules! frames {
             mod parsers {
                 use super::*;
                 use crate::parser::headers::headers_parser;
-                use crate::parser::{null,remaining_without_null, Switch, command_line, always_fail};
+                use crate::parser::{null,remaining_without_null, Switch, command_line, always_fail, HasBody};
                 use crate::error::FullError;
                 use crate::error::StompParseError;
                 use nom::combinator::map_res;

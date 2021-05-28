@@ -1,3 +1,5 @@
+//! Implements the model for headers, as specified in the
+//! [STOMP Protocol Spezification,Version 1.2](https://stomp.github.io/stomp-specification-1.2.html).
 #![allow(non_snake_case)]
 #[macro_use]
 mod macros;
