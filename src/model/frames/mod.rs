@@ -4,6 +4,7 @@ mod macros;
 #[allow(non_snake_case)]
 #[allow(unused_parens)]
 #[allow(clippy::new_without_default)]
+/// The `client` module defines the model for the frames that a STOMP client can send, as specified in the [STOMP Protocol Spezification,Version 1.2](https://stomp.github.io/stomp-specification-1.2.html).
 pub mod client {
 
     use crate::model::headers::*;
@@ -12,12 +13,14 @@ pub mod client {
         Client,
         (
             Abort,
+            "Aborts a transaction that has begun but not yet been committed.",
             ABORT,
             Client,
             transaction: Transaction
         ),
         (
             Ack,
+            "Acknowledges a received message.",
             ACK,
             Client,
             id: Id,
@@ -26,6 +29,7 @@ pub mod client {
         ),
         (
             Begin,
+            "Begins a transaction.",
             BEGIN,
             Client,
             transaction: Transaction,
@@ -33,6 +37,7 @@ pub mod client {
         ),
         (
             Commit,
+            "Commits a transaction.",
             COMMIT,
             Client,
             transaction: Transaction,
@@ -40,7 +45,8 @@ pub mod client {
         ),
         (
             Connect,
-            CONNECT,
+            "Initiates a STOMP session.",
+            CONNECT|STOMP,
             Client,
             host: Host,
             accepted_versions: AcceptVersion,
@@ -48,12 +54,14 @@ pub mod client {
         ),
         (
             Disconnect,
+            "Ends a STOMP session.",
             DISCONNECT,
             Client,
             receipt: Receipt
         ),
         (
             Nack,
+            "Indicates that the client did not, or could not, process a message.",
             NACK,
             Client,
             id: Id,
@@ -62,6 +70,7 @@ pub mod client {
         ),
         (
             Send,
+            "Sends a message to a specific destination.",
             SEND,
             Client,
             destination: Destination,
@@ -75,15 +84,8 @@ pub mod client {
             [body: body]
         ),
         (
-            Stomp,
-            STOMP,
-            Client,
-            host: Host,
-            accepted_versions: AcceptVersion,
-            (heartbeat: HeartBeat: (||HeartBeatValue::new(HeartBeatIntervalls::new(0,0))),login: Login, passcode: Passcode)
-        ),
-        (
             Subscribe,
+            "Subscribes to a specific destination.",
             SUBSCRIBE,
             Client,
             destination: Destination,
@@ -96,6 +98,7 @@ pub mod client {
         ),
         (
             Unsubscribe,
+            "Cancels a specific subscription.",
             UNSUBSCRIBE,
             Client,
             id: Id,
@@ -164,8 +167,26 @@ pub mod server {
 #[cfg(test)]
 #[macro_use]
 mod test {
+    use super::client::ClientFrame;
     use super::server::*;
     use crate::model::headers::*;
+    use std::convert::TryFrom;
+
+    #[test]
+    fn parses_stomp_frame() {
+        let result = ClientFrame::try_from(
+            "STOMP\nhost:foo\naccept-version:1.1\nheart-beat:10,20\n\n\u{00}"
+                .as_bytes()
+                .to_owned(),
+        );
+
+        if let Ok(ClientFrame::Connect(frame)) = result {
+            assert_eq!(StompVersion::V1_1, frame.accepted_versions.value().0[0])
+        } else {
+            panic!("Expected a connect frame")
+        }
+    }
+
     #[test]
     fn writes_connected_frame() {
         let frame = ConnectedFrame::new(

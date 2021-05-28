@@ -1,6 +1,7 @@
-#[macro_export]
+#![doc(hidden)]
 /// This macro is useful for forcing repeat expression - particularly optional
 /// items - without actually outputting anything depending on the input.
+#[macro_export]
 macro_rules! blank {
     ($in:ident) => {};
 }
@@ -132,7 +133,7 @@ macro_rules! frame {
 
 #[macro_export]
 macro_rules! frame_parser {
-    ( $name:ident, $command:ident, $origin:ident $(, $header_name:ident : $header_type:ident )* $(,( $(  $opt_header_name:ident : $opt_header_type:ident ),* ))? $(,[custom: $has_custom:ident])? $(,[body: $has_body:ident])? ) => {
+    ( $name:ident, $origin:ident $(, $header_name:ident : $header_type:ident )* $(,( $(  $opt_header_name:ident : $opt_header_type:ident ),* ))? $(,[custom: $has_custom:ident])? $(,[body: $has_body:ident])? ) => {
         paste::paste! {
 
             #[allow(unused)]
@@ -224,9 +225,12 @@ macro_rules! frame_parser {
 macro_rules! frames {
     { $group_name:ident,
         $(
-            ( $name:ident, $command:ident, $origin:ident $(, $header_name:ident : $header_type:ident )* $(,( $(  $opt_header_name:ident : $opt_header_type:ident $(: $opt_header_default:tt)?),* ))? $(,[custom: $has_custom:ident])? $(,[body: $has_body:ident])? )
+            ( $name:ident, $($comment:literal,)? $command:ident$(|$alias:ident)*, $origin:ident $(, $header_name:ident : $header_type:ident )* $(,( $(  $opt_header_name:ident : $opt_header_type:ident $(: $opt_header_default:tt)?),* ))? $(,[custom: $has_custom:ident])? $(,[body: $has_body:ident])? )
         ),+
     } => {
+        use crate::error::StompParseError;
+        use std::convert::TryFrom;
+
         paste::paste! {
             $(
                 frame! (
@@ -240,8 +244,12 @@ macro_rules! frames {
                 );
             )+
 
+            #[doc = "The `" $group_name "Frame` enum contains a variant for each frame that the "$group_name:lower" can send."]
+            #[doc = ""]
+            #[doc = "The `try_from(bytes: Vec<u8>)` method, provided via an implementaton of `TryFrom<Vec<u8>>`, is the recommended way to obtain a Frame from a received message."]
             pub enum [<$group_name Frame>] {
                 $(
+                    $(#[doc=$comment])?
                     $name([<$name Frame>])
                 ),+
             }
@@ -256,12 +264,20 @@ macro_rules! frames {
                 }
             }
 
-            pub mod parsers {
+            #[doc = "Parses a `" $group_name "Frame`  from the data contained in the provided vector of bytes."]
+            impl TryFrom<Vec<u8>> for [<$group_name Frame>]{
+                        type Error = StompParseError;
+                        fn try_from(bytes: Vec<u8>) -> Result<Self, StompParseError> {
+                            self::parsers::[<$group_name:lower _frame>](bytes)
+                         }
+            }
+
+            mod parsers {
                 use super::*;
-                use crate::headers::headers_parser;
-                use crate::{null,remaining_without_null, Switch, command_line, always_fail};
-                use crate::FullError;
-                use crate::StompParseError;
+                use crate::parser::headers::headers_parser;
+                use crate::parser::{null,remaining_without_null, Switch, command_line, always_fail};
+                use crate::error::FullError;
+                use crate::error::StompParseError;
                 use nom::combinator::map_res;
                 use nom::error::context;
                 use nom::error::VerboseError;
@@ -270,7 +286,6 @@ macro_rules! frames {
                  $(
                     frame_parser! (
                         $name,
-                        $command,
                         $group_name
                         $(, $header_name : $header_type )*
                         $(,( $(  $opt_header_name : $opt_header_type ),* ))?
@@ -287,6 +302,7 @@ macro_rules! frames {
                         vec![
                             $(
                                 (stringify!($command), [<$name:lower _frame>](input.as_ptr())),
+                                $((stringify!($alias), [<$name:lower _frame>](input.as_ptr())),)*
                             )+
                         ],
                         Box::new(always_fail),

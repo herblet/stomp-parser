@@ -1,7 +1,7 @@
 #![allow(non_snake_case)]
 #[macro_use]
 mod macros;
-use crate::StompParseError;
+use crate::error::StompParseError;
 use paste::paste;
 use std::str::FromStr;
 

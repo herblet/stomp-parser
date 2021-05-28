@@ -11,9 +11,9 @@ use nom::IResult;
 use nom::Parser;
 use std::str::FromStr;
 
+use crate::error::{FullError, StompParseError};
 use crate::model::headers::parser::*;
 use crate::model::headers::*;
-use crate::{FullError, StompParseError};
 
 #[allow(type_alias_bounds)]
 type HeaderParser<'a, E: 'static + FullError<&'a [u8], StompParseError>> =
@@ -142,8 +142,8 @@ mod tests {
     use nom::error::VerboseError;
 
     use super::headers_parser;
+    use crate::error::{FullError, StompParseError};
     use crate::model::headers::*;
-    use crate::{FullError, StompParseError};
     use nom::IResult;
     use std::vec::Vec;
 
