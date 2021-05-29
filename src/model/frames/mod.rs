@@ -237,15 +237,14 @@ mod test {
     #[test]
     fn parses_send_frame() {
         let message = b"SEND\n\
-            destination:path/to/hell\n\
-            content-type:foo/bar\n\
+            destination:stairway/to/heaven\n\
             \n\
-            Lorem ipsum dolor sit amet,\x00"
+            Lorem ipsum dolor sit amet,...\x00"
             .to_vec();
 
         if let Ok(ClientFrame::Send(frame)) = ClientFrame::try_from(message) {
             assert_eq!(
-                "Lorem ipsum dolor sit amet,",
+                "Lorem ipsum dolor sit amet,...",
                 std::str::from_utf8(frame.body().unwrap()).unwrap()
             );
         } else {
