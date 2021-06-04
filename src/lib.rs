@@ -2,7 +2,7 @@
 //! These frames can be parsed and serialized to and byte arrays.
 //!
 //! The types primarily of interest to users of the library are the enums `client::ClientFrame` and `server::ServerFrame`, which model the frames that can be sent
-//! by STOMP clients and STOMP servers respectively. Obtaining a frame from a message is achieve via `try_from`on those types.   
+//! by STOMP clients and STOMP servers respectively. Obtaining a frame from a message is achieved via `try_from` on those types.   
 //!
 //! # Example
 //! ```
@@ -24,7 +24,6 @@
 //!     panic!("Send Frame not parsed correctly");
 //! }
 //! ```
-
 #![warn(clippy::all)]
 mod model;
 mod parser;

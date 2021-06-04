@@ -304,6 +304,16 @@ macro_rules! frames {
                 }
             }
 
+            impl std::fmt::Display for [<$group_name Frame>] {
+                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+                    match self {
+                        $(
+                            [<$group_name Frame>]::$name(frame) => frame.fmt(f),
+                        )+
+                    }
+                }
+            }
+
             #[doc = "Parses a `" $group_name "Frame`  from the data contained in the provided vector of bytes."]
             impl TryFrom<Vec<u8>> for [<$group_name Frame>]{
                         type Error = StompParseError;
