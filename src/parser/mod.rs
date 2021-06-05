@@ -193,8 +193,8 @@ mod tests {
         if let ClientFrame::Connect(frame) = frame {
             assert_eq!(
                 HeartBeatIntervalls {
-                    expected: 10,
-                    supplied: 20
+                    supplied: 10,
+                    expected: 20,
                 },
                 *frame.heartbeat.value()
             );

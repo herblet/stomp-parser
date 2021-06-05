@@ -301,8 +301,8 @@ mod tests {
         if let Header::HeartBeat(value) = header {
             assert_eq!(
                 HeartBeatIntervalls {
-                    expected: 10,
-                    supplied: 20
+                    supplied: 10,
+                    expected: 20,
                 },
                 *value.value()
             );
@@ -336,8 +336,8 @@ mod tests {
         assert_eq!(1, headers.len());
         assert_eq!(
             Header::HeartBeat(HeartBeatValue::new(HeartBeatIntervalls {
-                expected: 10,
-                supplied: 20
+                supplied: 10,
+                expected: 20,
             })),
             headers[0]
         );
@@ -354,8 +354,8 @@ mod tests {
         assert_eq!(2, headers.len());
         assert_eq!(
             Header::HeartBeat(HeartBeatValue::new(HeartBeatIntervalls {
-                expected: 10,
-                supplied: 20
+                supplied: 10,
+                expected: 20,
             })),
             headers[0]
         );

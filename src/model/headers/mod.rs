@@ -44,14 +44,16 @@ impl FromStr for NameValue {
     }
 }
 
+/// A pair of numbers which specify at what intervall the originator of
+/// the containing message will supply a heartbeat and expect a heartbeat.
 #[derive(Eq, PartialEq, Debug, Clone, Default)]
 pub struct HeartBeatIntervalls {
-    pub expected: u32,
     pub supplied: u32,
+    pub expected: u32,
 }
 
 impl HeartBeatIntervalls {
-    pub fn new(expected: u32, supplied: u32) -> HeartBeatIntervalls {
+    pub fn new(supplied: u32, expected: u32) -> HeartBeatIntervalls {
         HeartBeatIntervalls { expected, supplied }
     }
 }
@@ -64,10 +66,11 @@ impl std::fmt::Display for HeartBeatIntervalls {
 
 impl FromStr for HeartBeatIntervalls {
     type Err = StompParseError;
+    /// Parses the string message as two ints representing "supplied, expected" heartbeat intervalls
     fn from_str(input: &str) -> Result<HeartBeatIntervalls, StompParseError> {
         split_once(input, ',')
             .ok_or_else(|| StompParseError::new(format!("Poorly formatted heartbeats: {}", input)))
-            .and_then(|(expected, supplied)| {
+            .and_then(|(supplied, expected)| {
                 u32::from_str(expected)
                     .and_then(|expected| {
                         u32::from_str(supplied)
@@ -216,6 +219,10 @@ headers!(
 
 #[cfg(test)]
 mod test {
+    use std::str::FromStr;
+
+    use crate::headers::HeartBeatIntervalls;
+
     use super::ContentLengthValue;
 
     #[test]
@@ -223,5 +230,13 @@ mod test {
         let x = ContentLengthValue::new(10);
 
         assert_eq!("content-length:10", x.to_string())
+    }
+
+    #[test]
+    fn heartbeat_is_supplied_then_expected() {
+        let hb = HeartBeatIntervalls::from_str("100,200").expect("Heartbeat parse failed");
+
+        assert_eq!(100, hb.supplied);
+        assert_eq!(200, hb.expected);
     }
 }
