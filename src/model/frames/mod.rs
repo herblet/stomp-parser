@@ -192,8 +192,8 @@ mod test {
         let frame = ConnectedFrame::new(
             VersionValue::new(StompVersion::V1_1),
             Some(HeartBeatValue::new(HeartBeatIntervalls {
-                expected: 10,
                 supplied: 20,
+                expected: 10,
             })),
             None,
             None,
@@ -202,7 +202,7 @@ mod test {
         let displayed = frame.to_string();
 
         assert_eq!(
-            "CONNECTED\nversion:1.1\nheart-beat:10,20\n\n\u{00}",
+            "CONNECTED\nversion:1.1\nheart-beat:20,10\n\n\u{00}",
             displayed
         );
     }

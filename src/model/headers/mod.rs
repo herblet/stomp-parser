@@ -60,7 +60,7 @@ impl HeartBeatIntervalls {
 
 impl std::fmt::Display for HeartBeatIntervalls {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
-        write!(f, "{},{}", &self.expected, &self.supplied)
+        write!(f, "{},{}", &self.supplied, &self.expected)
     }
 }
 
@@ -233,10 +233,17 @@ mod test {
     }
 
     #[test]
-    fn heartbeat_is_supplied_then_expected() {
+    fn heartbeat_reads_supplied_then_expected() {
         let hb = HeartBeatIntervalls::from_str("100,200").expect("Heartbeat parse failed");
 
         assert_eq!(100, hb.supplied);
         assert_eq!(200, hb.expected);
+    }
+
+    #[test]
+    fn heartbeat_writes_supplied_then_expected() {
+        let hb = HeartBeatIntervalls::new(500, 300);
+
+        assert_eq!("500,300", hb.to_string());
     }
 }
