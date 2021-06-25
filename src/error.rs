@@ -20,6 +20,12 @@ impl StompParseError {
     }
 }
 
+impl From<std::io::Error> for StompParseError {
+    fn from(io_error: std::io::Error) -> Self {
+        StompParseError::new(format!("IO-Error writing item: {:?}", io_error))
+    }
+}
+
 pub trait FullError<I, E>: ParseError<I> + FromExternalError<I, E> + ContextError<I> {}
 
 impl<I, E> FullError<I, E> for VerboseError<I> {}

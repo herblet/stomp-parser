@@ -129,10 +129,7 @@ macro_rules! frame {
                 $(
                      blank!($has_body);
                 pub fn body(&self) -> Option<&[u8]> {
-                    self.raw.as_ref().map(|vec| {
-                        &vec[self.body_offset_length.0 as usize
-                            ..(self.body_offset_length.0 as usize + self.body_offset_length.1)]
-                    })
+                    select_slice(&self.raw, &self.body_offset_length)
                 }
             )?
         }
@@ -146,6 +143,41 @@ macro_rules! frame {
             }
         )?
 
+        impl TryInto<Vec<u8>> for $name {
+            type Error = StompParseError;
+
+            fn try_into(self) -> Result<Vec<u8>, Self::Error> {
+                {
+                    let mut result = Vec::new();
+
+                    // STOMP Command
+                    writeln(&mut result, Self::NAME)?;
+
+                    // Required Headers
+                    $( writeln(&mut result, self.$header_name)?; )*
+
+                    // Optional Headers
+                    $($(
+                        choose_from_presence!($($opt_header_default)? { writeln(&mut result, self.$opt_header_name)?; },{self.$opt_header_name.as_ref().map_or(Ok(()),|value| writeln(&mut result, value))?;});
+                    )*)?
+
+                    // End of Headers
+                    result.write(b"\n")?;
+
+
+                    $(
+                        blank!($has_body);
+                        select_slice(&self.raw,&self.body_offset_length)
+                            .map_or(Ok(0),|body|result.write(body))?;
+                    )?
+
+                    // end of frame
+                    result.push(0u8);
+
+                    Ok::<Vec<u8>, std::io::Error>(result)
+                }.map_err(StompParseError::from)
+            }
+        }
 
         impl std::fmt::Display for $name {
              fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
@@ -266,7 +298,10 @@ macro_rules! frames {
         ),+
     } => {
         use crate::error::StompParseError;
-        use std::convert::TryFrom;
+        use crate::model::frames::utils::*;
+
+        use std::convert::{TryFrom, TryInto};
+        use std::io::Write;
 
         paste::paste! {
             $(
@@ -300,6 +335,18 @@ macro_rules! frames {
                             $([<$group_name Frame>]::$name(frame) => { blank!($has_body); frame.set_raw(bytes);})?
                         )+
                         _ => { /* Frames with no body do nothing */ }
+                    }
+                }
+            }
+
+            impl TryInto<Vec<u8>> for [<$group_name Frame>] {
+                type Error = StompParseError;
+
+                fn try_into(self) -> Result<Vec<u8>, <Self as TryInto<Vec<u8>>>::Error> {
+                    match self {
+                        $(
+                            [<$group_name Frame>]::$name(frame) => frame.try_into(),
+                        )+
                     }
                 }
             }
