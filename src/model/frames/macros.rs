@@ -143,6 +143,7 @@ macro_rules! frame {
             }
         )?
 
+        #[doc = "This implementation serialises [`"$name"`] into a byte array."]
         impl TryInto<Vec<u8>> for $name {
             type Error = StompParseError;
 
@@ -339,6 +340,7 @@ macro_rules! frames {
                 }
             }
 
+            #[doc = "This implementation serialises [`"$group_name Frame"`] into a byte array."]
             impl TryInto<Vec<u8>> for [<$group_name Frame>] {
                 type Error = StompParseError;
 
