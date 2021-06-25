@@ -1,6 +1,6 @@
 #[macro_use]
 mod macros;
-
+mod utils;
 #[allow(non_snake_case)]
 #[allow(unused_parens)]
 #[allow(clippy::new_without_default)]
@@ -109,6 +109,27 @@ pub mod client {
     }
 
     impl SendFrame {}
+
+    #[cfg(test)]
+    mod test {
+        use crate::{headers::*, parser::HasBody};
+
+        #[test]
+        fn body_extracts_correct_slice() {
+            let mut frame = super::SendFrame::from_parsed(
+                DestinationValue::new("foo".to_owned()),
+                None,
+                None,
+                None,
+                None,
+                Vec::default(),
+                (2, 3),
+            );
+            frame.set_raw(vec![0, 1, 2, 3, 4, 5, 6, 7]);
+
+            assert_eq!(b"\x02\x03\x04", frame.body().unwrap());
+        }
+    }
 }
 
 #[allow(non_snake_case)]
@@ -168,9 +189,11 @@ pub mod server {
 #[macro_use]
 mod test {
     use super::client::ClientFrame;
+    use super::client::SendFrame;
     use super::server::*;
     use crate::model::headers::*;
     use std::convert::TryFrom;
+    use std::convert::TryInto;
 
     #[test]
     fn parses_stomp_frame() {
@@ -235,6 +258,61 @@ mod test {
     }
 
     #[test]
+    fn writes_message_frame_bytes() {
+        let body = b"Lorem ipsum dolor sit amet,".to_vec();
+
+        let frame = MessageFrame::new(
+            MessageIdValue::new("msg-1".to_owned()),
+            DestinationValue::new("path/to/hell".to_owned()),
+            SubscriptionValue::new("annual".to_owned()),
+            Some(ContentTypeValue::new("foo/bar".to_owned())),
+            None,
+            body,
+        );
+
+        let bytes: Vec<u8> = frame.try_into().expect("Error writing bytes");
+
+        assert_eq!(
+            b"MESSAGE\n\
+            message-id:msg-1\n\
+            destination:path/to/hell\n\
+            subscription:annual\n\
+            content-type:foo/bar\n\
+            \n\
+            Lorem ipsum dolor sit amet,\x00",
+            bytes.as_slice()
+        );
+    }
+
+    #[test]
+    fn writes_binary_message_frame() {
+        let body = vec![0, 1, 1, 2, 3, 5, 8, 13];
+
+        let frame = MessageFrame::new(
+            MessageIdValue::new("msg-1".to_owned()),
+            DestinationValue::new("path/to/hell".to_owned()),
+            SubscriptionValue::new("annual".to_owned()),
+            Some(ContentTypeValue::new("foo/bar".to_owned())),
+            None,
+            body,
+        );
+
+        let bytes: Vec<u8> = frame.try_into().expect("Error writing bytes");
+
+        assert_eq!(
+            b"MESSAGE\n\
+            message-id:msg-1\n\
+            destination:path/to/hell\n\
+            subscription:annual\n\
+            content-type:foo/bar\n\
+            \n\
+            \x00\x01\x01\x02\x03\x05\x08\x0d\
+            \x00",
+            bytes.as_slice()
+        );
+    }
+
+    #[test]
     fn parses_send_frame() {
         let message = b"SEND\n\
             destination:stairway/to/heaven\n\
@@ -247,6 +325,22 @@ mod test {
                 "Lorem ipsum dolor sit amet,...",
                 std::str::from_utf8(frame.body().unwrap()).unwrap()
             );
+        } else {
+            panic!("Send Frame not parsed correctly");
+        }
+    }
+
+    #[test]
+    fn parses_binary_send_frame() {
+        let message = b"SEND\n\
+            destination:stairway/to/heaven\n\
+            \n\
+            \x00\x01\x01\x02\x03\x05\x08\x0d\
+            \x00"
+            .to_vec();
+
+        if let Ok(ClientFrame::Send(frame)) = ClientFrame::try_from(message) {
+            assert_eq!(&[0u8, 1, 1, 2, 3, 5, 8, 13], frame.body().unwrap());
         } else {
             panic!("Send Frame not parsed correctly");
         }

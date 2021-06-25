@@ -33,6 +33,12 @@ macro_rules! header {
                 }
             }
 
+            impl Into<$types> for [<$header Value>] {
+                fn into(self) -> $types {
+                    self.value
+                }
+            }
+
             impl std::fmt::Display for [<$header Value>] {
                 header_display!( $types );
             }
