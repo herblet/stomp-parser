@@ -1,21 +1,6 @@
 #[macro_use]
 mod macros;
-
-mod utils {
-    use std::{fmt::Display, io::Write};
-
-    pub fn writeln<W: Write, D: Display>(writer: &mut W, item: D) -> Result<(), std::io::Error> {
-        write!(writer, "{}\n", item)
-    }
-
-    pub fn select_slice<'a>(
-        raw: &'a Option<Vec<u8>>,
-        offset_length: &'a (isize, usize),
-    ) -> Option<&'a [u8]> {
-        raw.as_ref()
-            .map(|vec| &vec[offset_length.0 as usize..(offset_length.0 as usize + offset_length.1)])
-    }
-}
+mod utils;
 #[allow(non_snake_case)]
 #[allow(unused_parens)]
 #[allow(clippy::new_without_default)]
@@ -124,6 +109,27 @@ pub mod client {
     }
 
     impl SendFrame {}
+
+    #[cfg(test)]
+    mod test {
+        use crate::{headers::*, parser::HasBody};
+
+        #[test]
+        fn body_extracts_correct_slice() {
+            let mut frame = super::SendFrame::from_parsed(
+                DestinationValue::new("foo".to_owned()),
+                None,
+                None,
+                None,
+                None,
+                Vec::default(),
+                (2, 3),
+            );
+            frame.set_raw(vec![0, 1, 2, 3, 4, 5, 6, 7]);
+
+            assert_eq!(b"\x02\x03\x04", frame.body().unwrap());
+        }
+    }
 }
 
 #[allow(non_snake_case)]
@@ -183,6 +189,7 @@ pub mod server {
 #[macro_use]
 mod test {
     use super::client::ClientFrame;
+    use super::client::SendFrame;
     use super::server::*;
     use crate::model::headers::*;
     use std::convert::TryFrom;

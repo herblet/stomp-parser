@@ -221,7 +221,7 @@ headers!(
 mod test {
     use std::str::FromStr;
 
-    use crate::headers::HeartBeatIntervalls;
+    use crate::headers::{HeartBeatIntervalls, HeartBeatValue};
 
     use super::ContentLengthValue;
 
@@ -245,5 +245,15 @@ mod test {
         let hb = HeartBeatIntervalls::new(500, 300);
 
         assert_eq!("500,300", hb.to_string());
+    }
+
+    #[test]
+    fn heartbeat_into_intervalls() {
+        let hb = HeartBeatValue::new(HeartBeatIntervalls::new(123, 987));
+
+        let intervalls: HeartBeatIntervalls = hb.into();
+
+        assert_eq!(123, intervalls.supplied);
+        assert_eq!(987, intervalls.expected);
     }
 }
