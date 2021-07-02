@@ -108,28 +108,7 @@ pub mod client {
         )
     }
 
-    impl SendFrame {}
-
-    #[cfg(test)]
-    mod test {
-        use crate::{headers::*, parser::HasBody};
-
-        #[test]
-        fn body_extracts_correct_slice() {
-            let mut frame = super::SendFrame::from_parsed(
-                DestinationValue::new("foo".to_owned()),
-                None,
-                None,
-                None,
-                None,
-                Vec::default(),
-                (2, 3),
-            );
-            frame.set_raw(vec![0, 1, 2, 3, 4, 5, 6, 7]);
-
-            assert_eq!(b"\x02\x03\x04", frame.body().unwrap());
-        }
-    }
+    impl<'a> SendFrame<'a> {}
 }
 
 #[allow(non_snake_case)]
@@ -178,7 +157,7 @@ pub mod server {
         )
     }
 
-    impl ErrorFrame {
+    impl<'a> ErrorFrame<'a> {
         pub fn from_message(message: &str) -> Self {
             ErrorFrame::new(Vec::<CustomValue>::new(), message.as_bytes().to_owned())
         }
@@ -189,11 +168,11 @@ pub mod server {
 #[macro_use]
 mod test {
     use super::client::ClientFrame;
-    use super::client::SendFrame;
     use super::server::*;
     use crate::model::headers::*;
     use std::convert::TryFrom;
     use std::convert::TryInto;
+    use std::thread;
 
     #[test]
     fn parses_stomp_frame() {
@@ -235,10 +214,10 @@ mod test {
         let body = b"Lorem ipsum dolor sit amet,".to_vec();
 
         let frame = MessageFrame::new(
-            MessageIdValue::new("msg-1".to_owned()),
-            DestinationValue::new("path/to/hell".to_owned()),
-            SubscriptionValue::new("annual".to_owned()),
-            Some(ContentTypeValue::new("foo/bar".to_owned())),
+            MessageIdValue::new("msg-1"),
+            DestinationValue::new("path/to/hell"),
+            SubscriptionValue::new("annual"),
+            Some(ContentTypeValue::new("foo/bar")),
             None,
             body,
         );
@@ -262,10 +241,10 @@ mod test {
         let body = b"Lorem ipsum dolor sit amet,".to_vec();
 
         let frame = MessageFrame::new(
-            MessageIdValue::new("msg-1".to_owned()),
-            DestinationValue::new("path/to/hell".to_owned()),
-            SubscriptionValue::new("annual".to_owned()),
-            Some(ContentTypeValue::new("foo/bar".to_owned())),
+            MessageIdValue::new("msg-1"),
+            DestinationValue::new("path/to/hell"),
+            SubscriptionValue::new("annual"),
+            Some(ContentTypeValue::new("foo/bar")),
             None,
             body,
         );
@@ -289,10 +268,10 @@ mod test {
         let body = vec![0, 1, 1, 2, 3, 5, 8, 13];
 
         let frame = MessageFrame::new(
-            MessageIdValue::new("msg-1".to_owned()),
-            DestinationValue::new("path/to/hell".to_owned()),
-            SubscriptionValue::new("annual".to_owned()),
-            Some(ContentTypeValue::new("foo/bar".to_owned())),
+            MessageIdValue::new("msg-1"),
+            DestinationValue::new("path/to/hell"),
+            SubscriptionValue::new("annual"),
+            Some(ContentTypeValue::new("foo/bar")),
             None,
             body,
         );
@@ -327,6 +306,78 @@ mod test {
             );
         } else {
             panic!("Send Frame not parsed correctly");
+        }
+    }
+
+    fn assert_in_range(ptr: *const u8, len: usize, actual: *const u8) {
+        let offset = unsafe { actual.offset_from(ptr) };
+
+        if offset < 0 || offset > (len as isize) {
+            panic!("offset {} not in range of {}", offset, len);
+        }
+    }
+
+    #[test]
+    fn does_not_copy() {
+        let message = b"SEND\n\
+            destination:stairway/to/heaven\n\
+            funky:doodle\n\
+            \n\
+            Lorem ipsum dolor sit amet,...\x00"
+            .to_vec();
+
+        let source_ptr = message.as_ptr();
+        let source_len = message.len();
+
+        if let Ok(ClientFrame::Send(frame)) = ClientFrame::try_from(message) {
+            assert_in_range(source_ptr, source_len, frame.body().unwrap().as_ptr());
+            assert_in_range(source_ptr, source_len, frame.destination.value().as_ptr());
+            assert_in_range(source_ptr, source_len, frame.custom[0].value().as_ptr());
+            assert_in_range(
+                source_ptr,
+                source_len,
+                frame.custom[0].header_name().as_ptr(),
+            );
+        } else {
+            panic!("Send Frame not parsed correctly");
+        }
+    }
+
+    #[test]
+    fn works_after_move() {
+        let message = b"SEND\n\
+            destination:stairway/to/heaven\n\
+            \n\
+            Lorem ipsum dolor sit amet,...\x00"
+            .to_vec();
+
+        let src_ptr = message.as_ptr() as u64;
+        let len = message.len();
+        let parsed = ClientFrame::try_from(message);
+
+        let handle = thread::spawn(move || {
+            if let Ok(ClientFrame::Send(frame)) = parsed {
+                assert_eq!(
+                    "Lorem ipsum dolor sit amet,...",
+                    std::str::from_utf8(frame.body().unwrap()).unwrap()
+                );
+
+                assert_eq!("stairway/to/heaven", frame.destination.value());
+                return frame.body().unwrap().as_ptr() as u64;
+            } else {
+                panic!("Send Frame not parsed correctly");
+            }
+        });
+
+        if let Ok(address) = handle.join() {
+            println!(
+                "Source: {}, Len: {}, Offset: {} ",
+                src_ptr,
+                len,
+                address - src_ptr,
+            );
+        } else {
+            panic!("Error after move")
         }
     }
 

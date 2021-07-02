@@ -25,10 +25,11 @@
 //! }
 //! ```
 #![warn(clippy::all)]
+#[macro_use]
+mod common;
+pub mod error;
 mod model;
 mod parser;
-
-pub mod error;
 
 pub use model::client;
 pub use model::headers;

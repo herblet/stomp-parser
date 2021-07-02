@@ -11,6 +11,7 @@ license = "MIT"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
 paste = "1.0.5"
+either = "1.6"
 
 [dependencies.nom]
 version = "6.1.2"

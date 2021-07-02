@@ -1,114 +1,142 @@
 macro_rules! header_display {
-    ( $type1:ty ) => {
+    ( ) => {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
             write!(f, "{}:{}", self.header_name(), self.value)
         }
     };
 }
 macro_rules! header {
-
-    ( $header:ident, $name:expr, $types:ty ) => {
+    ( $header:ident, $name:expr $(,$types:ty $(, $default:expr )?)? ) => {
         paste! {
-            #[derive(Debug, Eq, PartialEq, Clone)]
-            pub struct [<$header Value>] {
-                value: $types
-            }
 
-             impl [<$header Value>] {
-                const NAME: &'static str =  $name;
-                pub fn new(value: $types) -> Self {
-                    [<$header Value>] { value }
+                #[derive(Debug, Eq, PartialEq, Clone)]
+                pub struct [<$header Value>]<'a> {
+                    value: or_else_type!($($types)?,&'a str),
+                    _lt: PhantomData<&'a str>
                 }
-            }
 
-            impl HeaderValue<$types> for [<$header Value>] {
-                fn header_type(&self) -> HeaderType {
-                    HeaderType::$header
+                impl <'a> Default for [<$header Value>]<'a> {
+                    fn default() -> Self {
+                        [<$header Value>] {
+                            value: or_else!($($($default)?)?,EMPTY),
+                            _lt: PhantomData
+                        }
+                    }
                 }
-                fn header_name(&self) -> &str {
-                    [<$header Value>]::NAME
-                }
-                fn value(&self) -> &$types {
-                    &self.value
-                }
-            }
 
-            impl Into<$types> for [<$header Value>] {
-                fn into(self) -> $types {
-                    self.value
-                }
-            }
+                 impl <'a> [<$header Value>]<'a> {
+                    const NAME: &'static str =  $name;
+                    pub fn new(value: or_else_type!($($types)?,&'a str)) -> Self {
+                        [<$header Value>] { value, _lt: PhantomData }
+                    }
 
-            impl std::fmt::Display for [<$header Value>] {
-                header_display!( $types );
-            }
+                    fn from_str(input: &'a str) -> Result<[<$header Value>]<'a>, StompParseError> {
+                        choose_from_presence!($($types)? ($($types)?::from_str(input).map([<$header Value>]::<'a>::new)
+                            .map_err(|_| StompParseError::new("[<Error Parsing $header Value>]"))), (Ok([<$header Value>]::new(input))))
 
-            impl FromStr for  [<$header Value>] {
-                type Err = StompParseError;
-                fn from_str(input: &str) -> Result<Self, Self::Err> {
-                    // borrowing here means the input is copied for String-valued values
-                    $types::from_str(input).map([<$header Value>]::new).map_err(|_|StompParseError::new("[<Error Parsing $header Value>]"))
+                    }
                 }
-            }
+
+                impl <'a> HeaderValue<'a>  for [<$header Value>]<'a> {
+                    type Value=&'a or_else_type!($($types)?,str);
+
+                    fn header_type(&self) -> HeaderType {
+                        HeaderType::$header
+                    }
+                    fn header_name(&self) -> &str {
+                        [<$header Value>]::NAME
+                    }
+                    fn value(&'a self) -> &'a or_else_type!($($types)?,str) {
+                        &self.value
+                    }
+                }
+
+                impl <'a> Into<or_else_type!($($types)?,&'a str)> for [<$header Value>]<'a> {
+                    fn into(self) -> or_else_type!($($types)?,&'a str) {
+                        self.value
+                    }
+                }
+
+                impl<'a> std::fmt::Display for [<$header Value>]<'a> {
+                    header_display!( );
+                }
+
         }
     };
 }
 macro_rules! headers {
-        ( $( ($header:ident, $name:literal ,$types:ty ) ),*  ) => {
+        ( $( ($header:ident, $name:literal $(,$types:ty $(, $default:expr )?)? ) ),*  ) => {
 
              #[derive(Debug, Eq, PartialEq, Clone)]
-            pub struct CustomValue {
-                name: String,
-                value: String
+            pub struct CustomValue<'a> {
+                name: &'a str,
+                value: &'a str
             }
 
-             impl CustomValue {
-                pub fn new(name: String, value: String) -> Self {
+             impl <'a> CustomValue<'a> {
+                pub fn new(name: &'a str, value: &'a str) -> Self {
                     CustomValue {
                         name,
                         value
                     }
                 }
+
+                pub fn decoded_name(&self) -> Result<Either<&str, String>, StompParseError> {
+                    decode_str(self.name)
+                }
             }
 
-            impl HeaderValue<String> for CustomValue {
+            impl <'a> HeaderValue<'a> for CustomValue<'a> {
+                type Value = &'a str;
+
                 fn header_type(&self) -> HeaderType {
-                    HeaderType::Custom(self.name.clone())
+                    HeaderType::Custom(self.name)
                 }
                 fn header_name(&self) -> &str {
                     &self.name
                 }
-                fn value(&self) -> &String {
+                fn value(&self) -> &'a str {
                     &self.value
                 }
             }
 
-             impl std::fmt::Display for CustomValue {
-                header_display!( String );
+             impl <'a> std::fmt::Display for CustomValue<'a> {
+                header_display!( );
             }
 
 
         #[derive(Debug, Eq, PartialEq, Clone)]
-        pub enum HeaderType {
+        pub enum HeaderType<'a> {
             $(
             $header
             ),*
-            ,Custom(String)
+            ,Custom(&'a str)
         }
 
-        impl FromStr for HeaderType {
-            type Err = StompParseError;
-            fn from_str(input: &str) -> std::result::Result<HeaderType, StompParseError> {
-                match(input) {
+        impl <'a> HeaderType<'a> {
+            pub fn matches(&self, name: &str) -> bool {
+                match self {
                         $(
-                            $name => Ok(HeaderType::$header),
+                            HeaderType::$header => name == $name,
                         )*
-                        name => Ok(HeaderType::Custom(name.to_owned()))
+                        HeaderType::Custom(header_name) => &name == header_name
                     }
             }
         }
 
-         impl std::fmt::Display for HeaderType {
+        impl <'a> TryFrom<&'a str> for HeaderType<'a> {
+            type Error = StompParseError;
+            fn try_from(input: &'a str) -> std::result::Result<HeaderType<'a>, StompParseError> {
+                match(input) {
+                        $(
+                            $name => Ok(HeaderType::$header),
+                        )*
+                        name => Ok(HeaderType::Custom(name))
+                    }
+            }
+        }
+
+         impl <'a> std::fmt::Display for HeaderType<'a> {
             fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
                 match(self) {
                     $(HeaderType::$header => {
@@ -124,19 +152,15 @@ macro_rules! headers {
 
         paste! {
             $(
-                header!($header, $name ,$types );
-
-                // fn [<parse_ $header _header>](input: String) -> Result<Header, StompParseError> {
-                //     [<$header Value>]::from_str(&input).map(Header::$header)
-                // }
+                header!($header, $name $(,$types $(, $default )?)? );
             )*
 
                 #[derive(Debug, Eq, PartialEq, Clone)]
-                pub enum Header {
+                pub enum Header<'a> {
                     $(
-                    $header([<$header Value>]),
+                    $header([<$header Value>]<'a>),
                     )*
-                    Custom(CustomValue)
+                    Custom(CustomValue<'a>)
                 }
 
                 #[doc(hidden)]
@@ -144,16 +168,16 @@ macro_rules! headers {
                     #![allow(non_snake_case)]
 
                     use super::*;
-                    pub type HeaderValueConverter = dyn Fn(String) -> Result<Header, StompParseError>;
+                    pub type HeaderValueConverter<'a> = dyn Fn(&'a str) -> Result<Header<'a>, StompParseError> + 'a;
 
-                    pub fn find_header_parser(header_type: HeaderType) -> Box<HeaderValueConverter> {
+                    pub fn find_header_parser<'a>(header_type: &HeaderType<'a>) -> Box<HeaderValueConverter<'a>> {
                         match header_type {
                             $(
                                 HeaderType::$header => Box::new([<parse_ $header _header>]),
                             )*
                             HeaderType::Custom(name) => {
                                 let cloned = name.clone();
-                                    Box::new(move |value| Ok(Header::Custom(CustomValue{
+                                    Box::new(move |value| Ok(Header::<'a>::Custom(CustomValue::<'a>{
                                     name: (&cloned).clone(),
                                     value
                                 })))
@@ -162,8 +186,8 @@ macro_rules! headers {
                     }
 
                     $(
-                        pub fn [<parse_ $header _header>](input: String) -> Result<Header, StompParseError> {
-                            [<$header Value>]::from_str(&input).map(Header::$header)
+                        pub fn [<parse_ $header _header>](input: &str) -> Result<Header, StompParseError> {
+                            [<$header Value>]::from_str(input).map(Header::$header)
                         }
                     )*
 

@@ -1,17 +1,77 @@
 //! Implements the model for headers, as specified in the
 //! [STOMP Protocol Spezification,Version 1.2](https://stomp.github.io/stomp-specification-1.2.html).
-#![allow(non_snake_case)]
 #[macro_use]
 mod macros;
 use crate::error::StompParseError;
+use either::Either;
 use paste::paste;
+use std::convert::TryFrom;
+use std::marker::PhantomData;
 use std::str::FromStr;
-
 /// A Header that reveals it's type and it's value, and can be displayed
-pub trait HeaderValue<T>: std::fmt::Display {
+pub trait HeaderValue<'a>: std::fmt::Display {
+    type Value;
     fn header_type(&self) -> HeaderType;
     fn header_name(&self) -> &str;
-    fn value(&self) -> &T;
+    fn value(&'a self) -> Self::Value;
+}
+
+pub trait DecodableValue<'a> {
+    fn decoded_value(&'a self) -> Result<Either<&'a str, String>, StompParseError>;
+}
+
+pub fn decode_escape_sequence(slice: &str) -> Result<char, StompParseError> {
+    match slice {
+        "\\\\" => Ok('\\'),
+        "\\r" => Ok('\r'),
+        "\\n" => Ok('\n'),
+        "\\c" => Ok(':'),
+        _ => Err(StompParseError::new(format!(
+            "Unknown escape sequence: '{}'",
+            slice
+        ))),
+    }
+}
+
+pub fn decode_str(raw: &str) -> Result<Either<&str, String>, StompParseError> {
+    match raw.find('\\') {
+        None => Ok(Either::Left(raw)),
+        Some(index) => {
+            let mut buffer = String::with_capacity(raw.len());
+            decode_at_and_continue(&mut buffer, raw, index)?;
+            Ok(Either::Right(buffer))
+        }
+    }
+}
+
+fn decode_at_and_continue(
+    buffer: &mut String,
+    slice: &str,
+    index: usize,
+) -> Result<(), StompParseError> {
+    buffer.push_str(&slice[..index]);
+    if index < slice.len() - 1 {
+        buffer.push(decode_escape_sequence(&slice[index..index + 2])?);
+        decode_slice(buffer, &slice[index + 2..])
+    } else {
+        Err(StompParseError::new("input ends with control character \\"))
+    }
+}
+
+fn decode_slice(buffer: &mut String, slice: &str) -> Result<(), StompParseError> {
+    match slice.find('\\') {
+        None => {
+            buffer.push_str(slice);
+            Ok(())
+        }
+        Some(index) => decode_at_and_continue(buffer, slice, index),
+    }
+}
+
+impl<'a, T: HeaderValue<'a, Value = &'a str>> DecodableValue<'a> for T {
+    fn decoded_value(&'a self) -> Result<Either<&'a str, String>, StompParseError> {
+        decode_str(self.value())
+    }
 }
 
 #[derive(Eq, PartialEq, Debug, Clone)]
@@ -139,6 +199,12 @@ pub enum AckType {
     ClientIndividual,
 }
 
+impl Default for AckType {
+    fn default() -> Self {
+        AckType::Auto
+    }
+}
+
 impl std::fmt::Display for AckType {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         f.write_str(match self {
@@ -195,35 +261,48 @@ impl FromStr for StompVersion {
     }
 }
 
+const EMPTY: &str = "";
+
 headers!(
-    (Ack, "ack", AckType),
-    (AcceptVersion, "accept-version", StompVersions),
-    (ContentLength, "content-length", u32),
-    (ContentType, "content-type", String),
-    (Destination, "destination", String),
-    (HeartBeat, "heart-beat", HeartBeatIntervalls),
-    (Host, "host", String),
-    (Id, "id", String),
-    (Login, "login", String),
-    (Message, "message", String),
-    (MessageId, "message-id", String),
-    (Passcode, "passcode", String),
-    (Receipt, "receipt", String),
-    (ReceiptId, "receipt-id", String),
-    (Server, "server", String),
-    (Session, "session", String),
-    (Subscription, "subscription", String),
-    (Transaction, "transaction", String),
-    (Version, "version", StompVersion)
+    (Ack, "ack", AckType, (AckType::Auto)),
+    (
+        AcceptVersion,
+        "accept-version",
+        StompVersions,
+        (StompVersions(Vec::new()))
+    ),
+    (ContentLength, "content-length", u32, 0),
+    (ContentType, "content-type"),
+    (Destination, "destination"),
+    (
+        HeartBeat,
+        "heart-beat",
+        HeartBeatIntervalls,
+        (HeartBeatIntervalls::new(0, 0))
+    ),
+    (Host, "host"),
+    (Id, "id"),
+    (Login, "login"),
+    (Message, "message"),
+    (MessageId, "message-id"),
+    (Passcode, "passcode"),
+    (Receipt, "receipt"),
+    (ReceiptId, "receipt-id"),
+    (Server, "server"),
+    (Session, "session"),
+    (Subscription, "subscription"),
+    (Transaction, "transaction"),
+    (Version, "version", StompVersion, (StompVersion::V1_2))
 );
 
 #[cfg(test)]
 mod test {
-    use std::str::FromStr;
-
     use crate::headers::{HeartBeatIntervalls, HeartBeatValue};
+    use either::Either;
 
-    use super::ContentLengthValue;
+    use std::{fmt::Display, str::FromStr};
+
+    use super::{ContentLengthValue, DecodableValue, HeaderValue};
 
     #[test]
     fn header_value_display() {
@@ -255,5 +334,125 @@ mod test {
 
         assert_eq!(123, intervalls.supplied);
         assert_eq!(987, intervalls.expected);
+    }
+
+    struct TestValue<'a> {
+        value: &'a str,
+    }
+
+    impl Display for TestValue<'_> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_fmt(format_args!("test:{}", self.value))
+        }
+    }
+
+    impl<'a> HeaderValue<'a> for TestValue<'a> {
+        type Value = &'a str;
+
+        fn header_type(&self) -> super::HeaderType {
+            todo!()
+        }
+
+        fn header_name(&self) -> &str {
+            todo!()
+        }
+
+        fn value(&'a self) -> Self::Value {
+            self.value
+        }
+    }
+
+    #[test]
+    fn returns_value_if_no_escape() {
+        let value = "Hello";
+        let instance = TestValue { value };
+
+        let result = instance.decoded_value();
+
+        if let Ok(Either::Left(result)) = result {
+            assert_eq!(value.as_ptr(), result.as_ptr());
+        } else {
+            panic!("Unexpected return");
+        }
+    }
+
+    #[test]
+    fn transforms_escaped_slash() {
+        let value = "Hel\\\\lo";
+        let instance = TestValue { value };
+
+        let result = instance.decoded_value();
+
+        if let Ok(Either::Right(result)) = result {
+            assert_eq!("Hel\\lo", &result);
+        } else {
+            panic!("Unexpected return");
+        }
+    }
+
+    #[test]
+    fn transforms_escaped_n() {
+        let value = "Hell\\nno";
+        let instance = TestValue { value };
+
+        let result = instance.decoded_value();
+
+        if let Ok(Either::Right(result)) = result {
+            assert_eq!("Hell\nno", &result);
+        } else {
+            panic!("Unexpected return");
+        }
+    }
+
+    #[test]
+    fn transforms_escaped_r() {
+        let value = "Hell\\rno";
+        let instance = TestValue { value };
+
+        let result = instance.decoded_value();
+
+        if let Ok(Either::Right(result)) = result {
+            assert_eq!("Hell\rno", &result);
+        } else {
+            panic!("Unexpected return");
+        }
+    }
+
+    #[test]
+    fn transforms_escaped_c() {
+        let value = "Hell\\cno";
+        let instance = TestValue { value };
+
+        let result = instance.decoded_value();
+
+        if let Ok(Either::Right(result)) = result {
+            assert_eq!("Hell:no", &result);
+        } else {
+            panic!("Unexpected return");
+        }
+    }
+
+    #[test]
+    fn rejects_escaped_t() {
+        let value = "Hell\\tno";
+        let instance = TestValue { value };
+
+        let result = instance.decoded_value();
+
+        if let Ok(_) = result {
+            panic!("Unexpected return");
+        }
+    }
+
+    #[test]
+    fn rejects_slash_at_end() {
+        let value = "Hell\\";
+        let instance = TestValue { value };
+
+        let result = instance.decoded_value();
+
+        if let Ok(_) = result {
+            panic!("Unexpected return");
+        }
     }
 }
