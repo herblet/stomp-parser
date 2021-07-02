@@ -12,7 +12,4 @@ license = "MIT"
 [dependencies]
 paste = "1.0.5"
 either = "1.6"
-
-[dependencies.nom]
-version = "6.1.2"
-features = ["alloc"]
+nom = "6.2.1"
