@@ -1,6 +1,10 @@
 #[macro_use]
+mod sender;
+#[macro_use]
 mod macros;
+
 mod utils;
+
 #[allow(non_snake_case)]
 #[allow(unused_parens)]
 #[allow(clippy::new_without_default)]
@@ -240,14 +244,16 @@ mod test {
     fn writes_message_frame_bytes() {
         let body = b"Lorem ipsum dolor sit amet,".to_vec();
 
-        let frame = MessageFrame::new(
-            MessageIdValue::new("msg-1"),
-            DestinationValue::new("path/to/hell"),
-            SubscriptionValue::new("annual"),
-            Some(ContentTypeValue::new("foo/bar")),
-            None,
-            body,
-        );
+        let mut builder = MessageFrameBuilder::new();
+
+        builder
+            .message_id("msg-1")
+            .destination("path/to/hell")
+            .subscription("annual")
+            .content_type("foo/bar")
+            .body(body);
+
+        let frame = builder.build().expect("Should be ok");
 
         let bytes: Vec<u8> = frame.try_into().expect("Error writing bytes");
 
@@ -267,14 +273,16 @@ mod test {
     fn writes_binary_message_frame() {
         let body = vec![0, 1, 1, 2, 3, 5, 8, 13];
 
-        let frame = MessageFrame::new(
-            MessageIdValue::new("msg-1"),
-            DestinationValue::new("path/to/hell"),
-            SubscriptionValue::new("annual"),
-            Some(ContentTypeValue::new("foo/bar")),
-            None,
-            body,
-        );
+        let mut builder = MessageFrameBuilder::new();
+
+        builder
+            .message_id("msg-1")
+            .destination("path/to/hell")
+            .subscription("annual")
+            .content_type("foo/bar")
+            .body(body);
+
+        let frame = builder.build().expect("Should be ok");
 
         let bytes: Vec<u8> = frame.try_into().expect("Error writing bytes");
 

@@ -10,7 +10,10 @@ use std::marker::PhantomData;
 use std::str::FromStr;
 /// A Header that reveals it's type and it's value, and can be displayed
 pub trait HeaderValue<'a>: std::fmt::Display {
+    type OwnedValue;
     type Value;
+    const OWNED: bool;
+
     fn header_type(&self) -> HeaderType;
     fn header_name(&self) -> &str;
     fn value(&'a self) -> Self::Value;
@@ -347,7 +350,9 @@ mod test {
     }
 
     impl<'a> HeaderValue<'a> for TestValue<'a> {
+        type OwnedValue = &'a str;
         type Value = &'a str;
+        const OWNED: bool = false;
 
         fn header_type(&self) -> super::HeaderType {
             todo!()

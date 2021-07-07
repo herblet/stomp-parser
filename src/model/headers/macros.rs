@@ -25,7 +25,9 @@ macro_rules! header {
                 }
 
                  impl <'a> [<$header Value>]<'a> {
-                    const NAME: &'static str =  $name;
+
+                    pub const NAME: &'static str =  $name;
+
                     pub fn new(value: or_else_type!($($types)?,&'a str)) -> Self {
                         [<$header Value>] { value, _lt: PhantomData }
                     }
@@ -35,10 +37,21 @@ macro_rules! header {
                             .map_err(|_| StompParseError::new("[<Error Parsing $header Value>]"))), (Ok([<$header Value>]::new(input))))
 
                     }
+
+                    pub fn from_either(_value: Option<or_else_type!($($types)?,&'static str)>, _bytes: &'static [u8] ) -> Self {
+                        choose_from_presence!($($types)? {
+                            Self::new(_value.unwrap())
+                        }, {
+                            Self::new(unsafe { std::str::from_utf8_unchecked( _bytes ) })
+                        })
+                    }
+
                 }
 
                 impl <'a> HeaderValue<'a>  for [<$header Value>]<'a> {
+                    type OwnedValue = or_else_type!($($types)?,&'a str);
                     type Value=&'a or_else_type!($($types)?,str);
+                    const OWNED: bool = choose_from_presence!($($types)? true, false);
 
                     fn header_type(&self) -> HeaderType {
                         HeaderType::$header
@@ -47,7 +60,7 @@ macro_rules! header {
                         [<$header Value>]::NAME
                     }
                     fn value(&'a self) -> &'a or_else_type!($($types)?,str) {
-                        &self.value
+                        choose_from_presence!($($types)? {&self.value}, {self.value})
                     }
                 }
 
@@ -87,7 +100,9 @@ macro_rules! headers {
             }
 
             impl <'a> HeaderValue<'a> for CustomValue<'a> {
+                type OwnedValue = &'a str;
                 type Value = &'a str;
+                const OWNED: bool = false;
 
                 fn header_type(&self) -> HeaderType {
                     HeaderType::Custom(self.name)

@@ -1,6 +1,9 @@
 macro_rules! frame {
     ( $name:ident,  $($comment:literal,)? $command:ident, $origin:ident $(, $header_name:ident : $header_type:ident )* $(,( $(  $opt_header_name:ident : $opt_header_type:ident $(: $opt_header_default:tt $(: $opt_header_default_comment:literal)?)?  ),* ))? $(,[custom: $has_custom:ident])? $(,[body: $has_body:ident])?  $(,$long_comment:literal)*) => {
         paste::paste! {
+
+            sender_frame!($name,  $($comment,)? $command, $origin $(, $header_name : $header_type )* $(,( $(  $opt_header_name : $opt_header_type $(: $opt_header_default $(: $opt_header_default_comment )?)?  ),* ))? $(,[custom: $has_custom])? $(,[body: $has_body])?  $(,$long_comment)*);
+
             $(#[doc = ""$comment]
             #[doc = ""])?
             #[doc = "This frame has required headers "$("`"$header_name"`")","* $(" and optional headers " $("`"$opt_header_name"`")","* )?"."]
@@ -29,7 +32,7 @@ macro_rules! frame {
         }
 
         impl $name<'_> {
-            const NAME: &'static str = stringify!($command);
+            pub const NAME: &'static str = stringify!($command);
         }
 
         impl $name<'static> {
@@ -103,31 +106,7 @@ macro_rules! frame {
 
             fn try_into(self) -> Result<Vec<u8>, Self::Error> {
                 {
-                    let mut result = Vec::new();
-
-                    // STOMP Command
-                    writeln(&mut result, Self::NAME)?;
-
-                    // Required Headers
-                    $( writeln(&mut result, self.$header_name)?; )*
-
-                    // Optional Headers
-                    $($(
-                        choose_from_presence!($($opt_header_default)? { writeln(&mut result, self.$opt_header_name)?; },{self.$opt_header_name.as_ref().map_or(Ok(()),|value| writeln(&mut result, value))?;});
-                    )*)?
-
-                    // End of Headers
-                    result.write(b"\n")?;
-
-
-                    $(
-                        result.write(self.$has_body)?;
-                    )?
-
-                    // end of frame
-                    result.push(0u8);
-
-                    Ok::<Vec<u8>, std::io::Error>(result)
+                    Ok::<Vec<u8>, std::io::Error>(self.raw)
                 }.map_err(StompParseError::from)
             }
         }
@@ -245,14 +224,14 @@ macro_rules! frames {
             ( $name:ident, $($comment:literal,)? $command:ident$(|$alias:ident)*, $origin:ident $(, $header_name:ident : $header_type:ident )* $(,( $(  $opt_header_name:ident : $opt_header_type:ident $(: $opt_header_default:tt$(: $opt_header_default_comment:literal)?)?),* ))? $(,[custom: $has_custom:ident])? $(,[body: $has_body:ident])? $(,$long_comment:literal)* )
         ),+
     } => {
+        use crate::common::constants::*;
+        use crate::common::functions::*;
+
         use crate::error::StompParseError;
-        use crate::model::frames::utils::*;
+        //use crate::model::frames::utils::*;
 
         use std::convert::{TryFrom, TryInto};
-        use std::io::Write;
-
-
-        const EMPTY: [u8; 0] = [];
+        //use std::io::Write;
 
         paste::paste! {
             $(
