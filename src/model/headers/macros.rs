@@ -32,24 +32,23 @@ macro_rules! header {
                         [<$header Value>] { value, _lt: PhantomData }
                     }
 
-                    fn from_str(input: &'a str) -> Result<[<$header Value>]<'a>, StompParseError> {
+                    pub fn from_owned(_value: or_else_type!($($types)?,String)) -> Self {
+                        choose_from_presence!($($types)? {
+                            Self::new(_value)
+                        }, {
+                            panic!("Macro error, should never be called");
+                        })
+                    }
+
+                    pub fn from_str(input: &'a str) -> Result<[<$header Value>]<'a>, StompParseError> {
                         choose_from_presence!($($types)? ($($types)?::from_str(input).map([<$header Value>]::<'a>::new)
                             .map_err(|_| StompParseError::new("[<Error Parsing $header Value>]"))), (Ok([<$header Value>]::new(input))))
 
                     }
-
-                    pub fn from_either(_value: Option<or_else_type!($($types)?,&'static str)>, _bytes: &'static [u8] ) -> Self {
-                        choose_from_presence!($($types)? {
-                            Self::new(_value.unwrap())
-                        }, {
-                            Self::new(unsafe { std::str::from_utf8_unchecked( _bytes ) })
-                        })
-                    }
-
                 }
 
                 impl <'a> HeaderValue<'a>  for [<$header Value>]<'a> {
-                    type OwnedValue = or_else_type!($($types)?,&'a str);
+                    type OwnedValue = or_else_type!($($types)?,String);
                     type Value=&'a or_else_type!($($types)?,str);
                     const OWNED: bool = choose_from_presence!($($types)? true, false);
 
@@ -100,7 +99,7 @@ macro_rules! headers {
             }
 
             impl <'a> HeaderValue<'a> for CustomValue<'a> {
-                type OwnedValue = &'a str;
+                type OwnedValue = String;
                 type Value = &'a str;
                 const OWNED: bool = false;
 

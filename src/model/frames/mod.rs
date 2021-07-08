@@ -157,6 +157,7 @@ pub mod server {
                 content_type: ContentType,
                 content_length: ContentLength
             ),
+            [custom: cus],
             [body: body]
         )
     }
@@ -217,56 +218,146 @@ mod test {
     fn writes_message_frame() {
         let body = b"Lorem ipsum dolor sit amet,".to_vec();
 
-        let frame = MessageFrame::new(
-            MessageIdValue::new("msg-1"),
-            DestinationValue::new("path/to/hell"),
-            SubscriptionValue::new("annual"),
-            Some(ContentTypeValue::new("foo/bar")),
+        let mut builder = MessageFrameBuilder::new();
+
+        builder
+            .message_id("msg-1".to_owned())
+            .destination("path/to/hell".to_owned())
+            .subscription("annual".to_owned())
+            .content_type("foo/bar".to_owned())
+            .body(body);
+
+        let frame = builder.build().expect("Should be ok");
+
+        assert_message_frame_roundtrip(
+            frame,
+            "msg-1",
+            "path/to/hell",
+            "annual",
+            Some("foo/bar"),
             None,
-            body,
-        );
-
-        let displayed = frame.to_string();
-
-        assert_eq!(
-            "MESSAGE\n\
-            message-id:msg-1\n\
-            destination:path/to/hell\n\
-            subscription:annual\n\
-            content-type:foo/bar\n\
-            \n\
-            Lorem ipsum dolor sit amet,\u{00}",
-            displayed
+            &vec![],
+            Some(b"Lorem ipsum dolor sit amet,"),
         );
     }
 
     #[test]
-    fn writes_message_frame_bytes() {
+    fn writes_custom_headers() {
         let body = b"Lorem ipsum dolor sit amet,".to_vec();
 
         let mut builder = MessageFrameBuilder::new();
 
         builder
-            .message_id("msg-1")
-            .destination("path/to/hell")
-            .subscription("annual")
-            .content_type("foo/bar")
+            .message_id("msg-1".to_owned())
+            .destination("path/to/hell".to_owned())
+            .subscription("annual".to_owned())
+            .content_type("foo/bar".to_owned())
+            .add_custom_header("hello".to_owned(), "world".to_owned())
             .body(body);
 
         let frame = builder.build().expect("Should be ok");
 
+        assert_message_frame_roundtrip(
+            frame,
+            "msg-1",
+            "path/to/hell",
+            "annual",
+            Some("foo/bar"),
+            None,
+            &vec![("hello", "world")],
+            Some(b"Lorem ipsum dolor sit amet,"),
+        );
+    }
+
+    fn assert_message_frame_roundtrip(
+        frame: MessageFrame<'static>,
+        expected_id: &str,
+        expected_dest: &str,
+        expected_sub: &str,
+        expected_content_type: Option<&str>,
+        expected_content_length: Option<u32>,
+        expected_custom: &Vec<(&str, &str)>,
+        expected_body: Option<&[u8]>,
+    ) {
+        assert_message_frame(
+            &frame,
+            expected_id,
+            expected_dest,
+            expected_sub,
+            expected_content_type,
+            expected_content_length,
+            expected_custom,
+            expected_body,
+        );
+
         let bytes: Vec<u8> = frame.try_into().expect("Error writing bytes");
 
+        if let Ok(ServerFrame::Message(frame)) = ServerFrame::try_from(bytes) {
+            assert_message_frame(
+                &frame,
+                expected_id,
+                expected_dest,
+                expected_sub,
+                expected_content_type,
+                expected_content_length,
+                expected_custom,
+                expected_body,
+            );
+        } else {
+            panic!("Should have received a Message frame")
+        }
+    }
+
+    fn assert_message_frame(
+        frame: &MessageFrame<'static>,
+        expected_id: &str,
+        expected_dest: &str,
+        expected_sub: &str,
+        expected_content_type: Option<&str>,
+        expected_content_length: Option<u32>,
+        expected_custom: &Vec<(&str, &str)>,
+        expected_body: Option<&[u8]>,
+    ) {
         assert_eq!(
-            b"MESSAGE\n\
-            message-id:msg-1\n\
-            destination:path/to/hell\n\
-            subscription:annual\n\
-            content-type:foo/bar\n\
-            \n\
-            Lorem ipsum dolor sit amet,\x00",
-            bytes.as_slice()
+            frame.message_id.value(),
+            expected_id,
+            "MessageId does not match"
         );
+        assert_eq!(
+            frame.destination.value(),
+            expected_dest,
+            "Destination does not match"
+        );
+        assert_eq!(
+            frame.subscription.value(),
+            expected_sub,
+            "Subscription does not match"
+        );
+        assert_eq!(
+            frame.content_type.as_ref().map(|value| value.value()),
+            expected_content_type,
+            "content-type does not match"
+        );
+
+        assert_eq!(
+            frame.content_length.as_ref().map(|value| value.value()),
+            expected_content_length.as_ref(),
+            "content-length does not match"
+        );
+        expected_custom.iter().for_each(|(name, value)| {
+            assert!(
+                frame
+                    .custom
+                    .iter()
+                    .any(|custom_value| custom_value.header_name() == *name
+                        && custom_value.value() == *value),
+                "Missing custom value {}:{}",
+                name,
+                value
+            );
+        });
+
+        assert_eq!(frame.body(), expected_body, "Body does not match");
     }
 
     #[test]
@@ -276,26 +367,23 @@ mod test {
         let mut builder = MessageFrameBuilder::new();
 
         builder
-            .message_id("msg-1")
-            .destination("path/to/hell")
-            .subscription("annual")
-            .content_type("foo/bar")
+            .message_id("msg-1".to_owned())
+            .destination("path/to/hell".to_owned())
+            .subscription("annual".to_owned())
+            .content_type("foo/bar".to_owned())
             .body(body);
 
         let frame = builder.build().expect("Should be ok");
 
-        let bytes: Vec<u8> = frame.try_into().expect("Error writing bytes");
-
-        assert_eq!(
-            b"MESSAGE\n\
-            message-id:msg-1\n\
-            destination:path/to/hell\n\
-            subscription:annual\n\
-            content-type:foo/bar\n\
-            \n\
-            \x00\x01\x01\x02\x03\x05\x08\x0d\
-            \x00",
-            bytes.as_slice()
+        assert_message_frame_roundtrip(
+            frame,
+            "msg-1",
+            "path/to/hell",
+            "annual",
+            Some("foo/bar"),
+            None,
+            &vec![],
+            Some(&[0, 1, 1, 2, 3, 5, 8, 13]),
         );
     }
 

@@ -10,16 +10,14 @@ macro_rules! sender_frame {
             pub struct [<$name Builder>] {
                 $(
                     $header_name: Option<<[<$header_type Value>]<'static> as HeaderValue<'static>>::OwnedValue>,
-                    [<$header_name _bytes>]: Option<Vec<u8>>,
                 )*
                 $($(
                     $opt_header_name: Option<<[<$opt_header_type Value>]<'static> as HeaderValue<'static>>::OwnedValue>,
-                    [<$opt_header_name _bytes>]: Option<Vec<u8>>,
                 )*)?
                 $(
                     #[doc(hidden)]
                     #[doc = "Useseless doc: `"$has_custom"`."]
-                    custom: Vec<(Vec<u8>,Vec<u8>)>,
+                    custom: Vec<(String, String)>,
                 )?
                 $(
                     #[doc(hidden)]
@@ -32,12 +30,8 @@ macro_rules! sender_frame {
                 $(
                     #[doc = "The value of the `"$header_name"` header."]
                     pub fn $header_name<'a,'b>(&'b mut self, new_val: <[<$header_type Value>]<'a> as HeaderValue<'a>>::OwnedValue) -> &'b mut [<$name Builder>] {
-                        self.[<$header_name _bytes>] = Some(new_val.to_string().into_bytes());
 
-                        if [<$header_type Value>]::OWNED {
-                            // this is safe because the transmute is never actually effected, since we are inside "if OWNED".
-                            self.$header_name = Some(unsafe { std::mem::transmute::<<[<$header_type Value>]<'a> as HeaderValue<'a>>::OwnedValue,<[<$header_type Value>]<'static> as HeaderValue<'static>>::OwnedValue >(new_val) })
-                        }
+                        self.$header_name = Some(new_val);
 
                         self
                     }
@@ -46,12 +40,7 @@ macro_rules! sender_frame {
                     #[doc = "The value of the `"$opt_header_name"` header."]
                     $($(#[doc = "Defaults to `"$opt_header_default_comment"` if not supplied."])?)?
                     pub fn $opt_header_name<'a>(&'a mut self, new_val: <[<$opt_header_type Value>]<'a> as HeaderValue<'a>>::OwnedValue) -> &'a mut [<$name Builder>] {
-                        self.[<$opt_header_name _bytes>] = Some(new_val.to_string().into_bytes());
-
-                        if [<$opt_header_type Value>]::OWNED {
-                            // this is safe because the transmute is never actually effected, since we are inside "if OWNED".
-                            self.$opt_header_name = Some(unsafe { std::mem::transmute::<<[<$opt_header_type Value>]<'a> as HeaderValue<'a>>::OwnedValue,<[<$opt_header_type Value>]<'static> as HeaderValue<'static>>::OwnedValue >(new_val) })
-                        }
+                        self.$opt_header_name = Some(new_val);
 
                         self
                     }
@@ -59,7 +48,7 @@ macro_rules! sender_frame {
                 $(
                     #[doc = "Useseless doc: `"$has_custom"`."]
                     pub fn add_custom_header<'a>(&'a mut self, name: String, value: String) -> &'a mut [<$name Builder>] {
-                        self.custom.push((name.into_bytes(), value.into_bytes()));
+                        self.custom.push((name, value));
                         self
                     }
                 )?
@@ -74,12 +63,10 @@ macro_rules! sender_frame {
                 pub fn new() -> [<$name Builder>] {
                     [<$name Builder>] {
                         $(
-                            $header_name: None,
-                            [<$header_name _bytes>]: None,
+                            $header_name: Option::<<[<$header_type Value>]<'static> as HeaderValue<'static>>::OwnedValue>::None,
                         )*
                         $($(
                             $opt_header_name: choose_from_presence!($($opt_header_default)? {Some($($opt_header_default)?().into())},{None}),
-                            [<$opt_header_name _bytes>]:  choose_from_presence!($($opt_header_default)? {Some(Into::<<[<$opt_header_type Value>]<'_> as HeaderValue<'_>>::OwnedValue>::into($($opt_header_default)?()).to_string().into_bytes())},{None}),
                         )*)?
                         $(
                             custom: choose_from_presence!($has_custom {Vec::new()}, {Vec::new()}),
@@ -95,21 +82,59 @@ macro_rules! sender_frame {
                     let mut bytes : Vec<u8> = Vec::with_capacity(1000);
                     let bytes_ref = &mut bytes;
 
+                    let mut frame = $name::init(Vec::new());
+
                     write_command(bytes_ref, $name::NAME);
+
 
                     $(
                         // Write the required header, returning an error if the value was not set
-                         let (_,[<$header_name _range>]) = self.[<$header_name _bytes>].take().map(|mut value| {
-                            write_header(bytes_ref, [<$header_type Value>]::NAME, &mut value)
-                        }).ok_or(StompParseError::new(format!("Required header {} not set.", ([<$header_type Value>]::NAME))))?;
+                        let (_,[<$header_name _range>]) = if [<$header_type Value>]::OWNED {
+                            // Owned values are already in the right form for the frame, but also need to be written to the
+                            // output buffer
+                            self.[<$header_name>].take().map(|value| {
+                                let mut bytes = value.to_string().into_bytes();
+                                frame.$header_name = [<$header_type Value>]::from_owned(value);
+                                write_header(bytes_ref, [<$header_type Value>]::NAME, &mut bytes)
+                            }).ok_or(StompParseError::new(format!("Required header {} not set.", ([<$header_type Value>]::NAME))))?
+                        } else {
+                            // Non-owned values strings; the value for the header on the frame needs to be in the byte buffer
+                            self.[<$header_name>].take().map(|value| {
+                                let mut bytes = value.to_string().into_bytes();
+                                write_header(bytes_ref, [<$header_type Value>]::NAME, &mut bytes)
+                            }).ok_or(StompParseError::new(format!("Required header {} not set.", ([<$header_type Value>]::NAME))))?
+                        };
                     )*
 
                     $($(
-                        // Write the optional header, if set; otherwise nothing
-                        let [<$opt_header_name _range>] = self.[<$opt_header_name _bytes>].take().map(|mut value| {
-                                write_header(bytes_ref, [<$opt_header_type Value>]::NAME, &mut value)
-                        });
+                        // Write the required header, returning an error if the value was not set
+                        let [<$opt_header_name _range>] = if [<$opt_header_type Value>]::OWNED {
+                            // Owned values are already in the right form for the frame, but also need to be written to the
+                            // output buffer
+                            self.[<$opt_header_name>].take().map(|value| {
+                                let mut bytes = value.to_string().into_bytes();
+                                 choose_from_presence!($($opt_header_default)? {
+                                    frame.$opt_header_name = [<$opt_header_type Value>]::from_owned(value);
+                                }, {
+                                    frame.$opt_header_name = Some([<$opt_header_type Value>]::from_owned(value));
+                                });
+                                write_header(bytes_ref, [<$opt_header_type Value>]::NAME, &mut bytes)
+                            })
+                        } else {
+                            // Non-owned values strings; the value for the header on the frame needs to be in the byte buffer
+                            self.[<$opt_header_name>].take().map(|value| {
+                                let mut bytes = value.to_string().into_bytes();
+                                write_header(bytes_ref, [<$opt_header_type Value>]::NAME, &mut bytes)
+                            })
+                        };
                     )*)?
+
+                    $(
+                        let $has_custom : Vec<((usize, usize),(usize,usize))> = self.custom.iter().map(|(name, value)| {
+                             let mut bytes = value.to_string().into_bytes();
+                             write_header(bytes_ref, &name, &mut bytes)
+                        }).collect();
+                    )?
 
                     // End the headers
                     write_headers_end(bytes_ref);
@@ -130,21 +155,37 @@ macro_rules! sender_frame {
                     let ptr : *const [u8] = bytes.as_slice();
                     let slice = unsafe { ptr.as_ref().unwrap() };
 
-                    let mut frame = $name::init(bytes);
+                    frame.raw = bytes;
 
                     $(
-                        frame.$header_name = [<$header_type Value>]::from_either(self.$header_name,&slice[[<$header_name _range>].0..[<$header_name _range>].1]);
+                        if ![<$header_type Value>]::OWNED {
+                            let value = unsafe { std::str::from_utf8_unchecked(&slice[[<$header_name _range>].0..[<$header_name _range>].1]) };
+                            frame.$header_name = [<$header_type Value>]::from_str(value).expect("Should never fail because string valued");
+                        }
                     )*
 
                     $($(
                         if let Some((_,[<$opt_header_name _range>])) = [<$opt_header_name _range>] {
-                            frame.$opt_header_name = choose_from_presence!($($opt_header_default)? {
-                                [<$opt_header_type Value>]::from_either(self.$opt_header_name,&slice[[<$opt_header_name _range>].0..[<$opt_header_name _range>].1])
-                            }, {
-                                Some([<$opt_header_type Value>]::from_either(self.$opt_header_name,&slice[[<$opt_header_name _range>].0..[<$opt_header_name _range>].1]))
-                            });
+                            if ![<$opt_header_type Value>]::OWNED {
+                                let value = unsafe { std::str::from_utf8_unchecked(&slice[[<$opt_header_name _range>].0..[<$opt_header_name _range>].1]) };
+                                choose_from_presence!($($opt_header_default)? {
+                                    frame.$opt_header_name = [<$opt_header_type Value>]::from_str(value).expect("Should never fail because string valued");
+                                }, {
+                                    frame.$opt_header_name = Some([<$opt_header_type Value>]::from_str(value).expect("Should never fail because string valued"));
+                                });
+                            }
                         };
                     )*)?
+
+                    $(
+                        frame.custom = $has_custom.iter().map(|ranges| {
+                            let name = unsafe { std::str::from_utf8_unchecked(&slice[ranges.0.0..ranges.0.1]) };
+                            let value = unsafe { std::str::from_utf8_unchecked(&slice[ranges.1.0..ranges.1.1]) };
+
+                            CustomValue::new(name, value)
+                        }).collect();
+                    )?
+
 
                     $(
                         [<_ $has_body>] = ();
