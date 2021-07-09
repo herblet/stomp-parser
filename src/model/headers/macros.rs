@@ -28,11 +28,11 @@ macro_rules! header {
 
                     pub const NAME: &'static str =  $name;
 
-                    pub fn new(value: or_else_type!($($types)?,&'a str)) -> Self {
+                    pub(crate) fn new(value: or_else_type!($($types)?,&'a str)) -> Self {
                         [<$header Value>] { value, _lt: PhantomData }
                     }
 
-                    pub fn from_owned(_value: or_else_type!($($types)?,String)) -> Self {
+                    pub(crate) fn from_owned(_value: or_else_type!($($types)?,String)) -> Self {
                         choose_from_presence!($($types)? {
                             Self::new(_value)
                         }, {
@@ -40,7 +40,7 @@ macro_rules! header {
                         })
                     }
 
-                    pub fn from_str(input: &'a str) -> Result<[<$header Value>]<'a>, StompParseError> {
+                    pub(crate) fn from_str(input: &'a str) -> Result<[<$header Value>]<'a>, StompParseError> {
                         choose_from_presence!($($types)? ($($types)?::from_str(input).map([<$header Value>]::<'a>::new)
                             .map_err(|_| StompParseError::new("[<Error Parsing $header Value>]"))), (Ok([<$header Value>]::new(input))))
 
@@ -52,9 +52,6 @@ macro_rules! header {
                     type Value=&'a or_else_type!($($types)?,str);
                     const OWNED: bool = choose_from_presence!($($types)? true, false);
 
-                    fn header_type(&self) -> HeaderType {
-                        HeaderType::$header
-                    }
                     fn header_name(&self) -> &str {
                         [<$header Value>]::NAME
                     }
@@ -103,9 +100,6 @@ macro_rules! headers {
                 type Value = &'a str;
                 const OWNED: bool = false;
 
-                fn header_type(&self) -> HeaderType {
-                    HeaderType::Custom(self.name)
-                }
                 fn header_name(&self) -> &str {
                     &self.name
                 }

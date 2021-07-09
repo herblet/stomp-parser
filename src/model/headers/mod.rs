@@ -14,7 +14,6 @@ pub trait HeaderValue<'a>: std::fmt::Display {
     type Value;
     const OWNED: bool;
 
-    fn header_type(&self) -> HeaderType;
     fn header_name(&self) -> &str;
     fn value(&'a self) -> Self::Value;
 }
@@ -353,10 +352,6 @@ mod test {
         type OwnedValue = &'a str;
         type Value = &'a str;
         const OWNED: bool = false;
-
-        fn header_type(&self) -> super::HeaderType {
-            todo!()
-        }
 
         fn header_name(&self) -> &str {
             todo!()
