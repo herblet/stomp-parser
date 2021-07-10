@@ -10,7 +10,7 @@ mod utils;
 #[allow(clippy::new_without_default)]
 pub mod client {
     //! Implements the model for the frames that a STOMP client can send, as specified in
-    //! the [STOMP Protocol Spezification,Version 1.2](https://stomp.github.io/stomp-specification-1.2.html).
+    //! the [STOMP Protocol Specification,Version 1.2](https://stomp.github.io/stomp-specification-1.2.html).
 
     use crate::model::headers::*;
 
@@ -120,7 +120,7 @@ pub mod client {
 #[allow(clippy::new_without_default)]
 pub mod server {
     //! Implements the model for the frames that a STOMP server can send, as specified in the
-    //! [STOMP Protocol Spezification,Version 1.2](https://stomp.github.io/stomp-specification-1.2.html).
+    //! [STOMP Protocol Specification,Version 1.2](https://stomp.github.io/stomp-specification-1.2.html).
     use crate::model::headers::*;
     frames! {
         Server,

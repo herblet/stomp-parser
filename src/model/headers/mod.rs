@@ -1,5 +1,5 @@
 //! Implements the model for headers, as specified in the
-//! [STOMP Protocol Spezification,Version 1.2](https://stomp.github.io/stomp-specification-1.2.html).
+//! [STOMP Protocol Specification,Version 1.2](https://stomp.github.io/stomp-specification-1.2.html).
 #[macro_use]
 mod macros;
 use crate::common::functions::decode_str;
