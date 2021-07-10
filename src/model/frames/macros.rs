@@ -54,46 +54,7 @@ macro_rules! frame {
             )?
             }
         }
-
-        //     pub fn new( $(
-        //         $header_name: [<$header_type Value>],
-        //     )* $($(
-        //         $opt_header_name: Option<[<$opt_header_type Value>]>,
-        //     )*)? $(
-        //         $has_custom: Vec<CustomValue>,
-        //     )? $(
-        //         $has_body: Vec<u8>,
-        //     )?
-        //  )  -> Self {
-        //         let choose_from_presence!($($has_body)? (mut frame), frame) = $name {
-        //             raw: or_else!($($has_body)?,(vec![])),
-        //             $(
-        //                 $header_name,
-        //             )*
-        //             $($(
-        //                 $opt_header_name: choose_from_presence!($(($opt_header_default))? ($opt_header_name.unwrap_or_else($($opt_header_default)?)),($opt_header_name)),
-        //             )*)?
-        //             $(
-        //                 $has_custom: (),
-        //                 custom: $has_custom,
-        //             )?
-        //             $(
-        //                 $has_body: &EMPTY,
-        //             )?
-        //         };
-
-        //         $(
-        //             blank!($has_body);
-        //             frame.init_body();
-        //         )?
-
-        //         frame
-        //     }
-                 $(
-        //              fn init_body(&mut self) {
-        //                  let bytes: *const [u8] = self.raw.as_slice();
-        //                  self.$has_body = unsafe { bytes.as_ref().unwrap() };
-        //              }
+                $(
                 pub fn body(&self) -> Option<&[u8]> {
                     Some(self.$has_body)
                 }

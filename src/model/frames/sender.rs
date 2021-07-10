@@ -9,7 +9,7 @@ macro_rules! sender_frame {
             #[doc = ""$long_comment])?
             pub struct [<$name Builder>] {
                 $(
-                    $header_name: Option<<[<$header_type Value>] as HeaderValue>::OwnedValue>,
+                    $header_name: <[<$header_type Value>] as HeaderValue>::OwnedValue,
                 )*
                 $($(
                     $opt_header_name: Option<<[<$opt_header_type Value>] as HeaderValue>::OwnedValue>,
@@ -27,15 +27,6 @@ macro_rules! sender_frame {
             }
 
             impl [<$name Builder>] {
-                $(
-                    #[doc = "The value of the `"$header_name"` header."]
-                    pub fn $header_name(mut self, new_val: <[<$header_type Value>] as HeaderValue>::OwnedValue) -> [<$name Builder>] {
-
-                        self.$header_name = Some(new_val);
-
-                        self
-                    }
-                )*
                 $($(
                     #[doc = "The value of the `"$opt_header_name"` header."]
                     $($(#[doc = "Defaults to `"$opt_header_default_comment"` if not supplied."])?)?
@@ -60,10 +51,12 @@ macro_rules! sender_frame {
                     }
                 )?
 
-                pub fn new() -> [<$name Builder>] {
+                pub fn new($(
+                            $header_name: <[<$header_type Value>] as HeaderValue>::OwnedValue,
+                        )*) -> [<$name Builder>] {
                     [<$name Builder>] {
                         $(
-                            $header_name: Option::<<[<$header_type Value>] as HeaderValue>::OwnedValue>::None,
+                            $header_name,
                         )*
                         $($(
                             $opt_header_name: choose_from_presence!($($opt_header_default)? {Some($($opt_header_default)?().into())},{None}),
@@ -77,7 +70,8 @@ macro_rules! sender_frame {
                     }
                 }
 
-                pub fn build(mut self) -> Result<$name, StompParseError> {
+                #[allow(unused_mut)]
+                pub fn build(mut self) -> $name {
                     // First, build the byte array
                     let mut bytes : Vec<u8> = Vec::with_capacity(1000);
                     let bytes_ref = &mut bytes;
@@ -86,23 +80,18 @@ macro_rules! sender_frame {
 
                     write_command(bytes_ref, $name::NAME);
 
-
                     $(
                         // Write the required header, returning an error if the value was not set
                         let (_,[<$header_name _range>]) = if [<$header_type Value>]::OWNED {
                             // Owned values are already in the right form for the frame, but also need to be written to the
                             // output buffer
-                            self.[<$header_name>].take().map(|value| {
-                                let mut bytes = value.to_string().into_bytes();
-                                frame.$header_name = [<$header_type Value>]::from_owned(value);
-                                write_header(bytes_ref, [<$header_type Value>]::NAME, &mut bytes)
-                            }).ok_or(StompParseError::new(format!("Required header {} not set.", ([<$header_type Value>]::NAME))))?
+                            let mut bytes = self.[<$header_name>].to_string().into_bytes();
+                            frame.$header_name = [<$header_type Value>]::from_owned(self.[<$header_name>]);
+                            write_header(bytes_ref, [<$header_type Value>]::NAME, &mut bytes)
                         } else {
                             // Non-owned values strings; the value for the header on the frame needs to be in the byte buffer
-                            self.[<$header_name>].take().map(|value| {
-                                let mut bytes = value.to_string().into_bytes();
-                                write_header(bytes_ref, [<$header_type Value>]::NAME, &mut bytes)
-                            }).ok_or(StompParseError::new(format!("Required header {} not set.", ([<$header_type Value>]::NAME))))?
+                            let mut bytes = self.[<$header_name>].to_string().into_bytes();
+                            write_header(bytes_ref, [<$header_type Value>]::NAME, &mut bytes)
                         };
                     )*
 
@@ -191,7 +180,7 @@ macro_rules! sender_frame {
 
                     )?
 
-                    Ok(frame)
+                    frame
                 }
             }
         }

@@ -165,10 +165,7 @@ pub mod server {
 
     impl ErrorFrame {
         pub fn from_message(message: &str) -> Self {
-            ErrorFrameBuilder::new()
-                .message(message.to_owned())
-                .build()
-                .unwrap()
+            ErrorFrameBuilder::new().message(message.to_owned()).build()
         }
     }
 }
@@ -176,12 +173,20 @@ pub mod server {
 #[cfg(test)]
 #[macro_use]
 mod test {
-    use super::client::ClientFrame;
+    use super::client::*;
     use super::server::*;
+
     use crate::model::headers::*;
     use std::convert::TryFrom;
     use std::convert::TryInto;
     use std::thread;
+
+    #[test]
+    fn new_builder_can_be_build() {
+        let frame = SendFrameBuilder::new("foo/bar".to_owned()).build();
+
+        assert_eq!("foo/bar", Into::<&str>::into(frame.destination));
+    }
 
     #[test]
     fn parses_stomp_frame() {
@@ -200,14 +205,12 @@ mod test {
 
     #[test]
     fn writes_connected_frame() {
-        let frame = ConnectedFrameBuilder::new()
-            .version(StompVersion::V1_1)
+        let frame = ConnectedFrameBuilder::new(StompVersion::V1_1)
             .heartbeat(HeartBeatIntervalls {
                 supplied: 20,
                 expected: 10,
             })
-            .build()
-            .unwrap();
+            .build();
 
         let displayed = frame.to_string();
 
@@ -221,14 +224,14 @@ mod test {
     fn writes_message_frame() {
         let body = b"Lorem ipsum dolor sit amet,".to_vec();
 
-        let frame = MessageFrameBuilder::new()
-            .message_id("msg-1".to_owned())
-            .destination("path/to/hell".to_owned())
-            .subscription("annual".to_owned())
-            .content_type("foo/bar".to_owned())
-            .body(body)
-            .build()
-            .expect("Should be ok");
+        let frame = MessageFrameBuilder::new(
+            "msg-1".to_owned(),
+            "path/to/hell".to_owned(),
+            "annual".to_owned(),
+        )
+        .content_type("foo/bar".to_owned())
+        .body(body)
+        .build();
 
         assert_message_frame_roundtrip(
             frame,
@@ -246,15 +249,15 @@ mod test {
     fn writes_custom_headers() {
         let body = b"Lorem ipsum dolor sit amet,".to_vec();
 
-        let frame = MessageFrameBuilder::new()
-            .message_id("msg-1".to_owned())
-            .destination("path/to/hell".to_owned())
-            .subscription("annual".to_owned())
-            .content_type("foo/bar".to_owned())
-            .add_custom_header("hello".to_owned(), "world".to_owned())
-            .body(body)
-            .build()
-            .expect("Should be ok");
+        let frame = MessageFrameBuilder::new(
+            "msg-1".to_owned(),
+            "path/to/hell".to_owned(),
+            "annual".to_owned(),
+        )
+        .content_type("foo/bar".to_owned())
+        .add_custom_header("hello".to_owned(), "world".to_owned())
+        .body(body)
+        .build();
 
         assert_message_frame_roundtrip(
             frame,
@@ -363,14 +366,14 @@ mod test {
     fn writes_binary_message_frame() {
         let body = vec![0, 1, 1, 2, 3, 5, 8, 13];
 
-        let frame = MessageFrameBuilder::new()
-            .message_id("msg-1".to_owned())
-            .destination("path/to/hell".to_owned())
-            .subscription("annual".to_owned())
-            .content_type("foo/bar".to_owned())
-            .body(body)
-            .build()
-            .expect("Should be ok");
+        let frame = MessageFrameBuilder::new(
+            "msg-1".to_owned(),
+            "path/to/hell".to_owned(),
+            "annual".to_owned(),
+        )
+        .content_type("foo/bar".to_owned())
+        .body(body)
+        .build();
 
         assert_message_frame_roundtrip(
             frame,
