@@ -1,5 +1,5 @@
-//! `stomp_parser` implements a model for STOMP Frames, as spezified in the [STOMP Protocol Spezification,Version 1.2](https://stomp.github.io/stomp-specification-1.2.html).
-//! These frames can be parsed and serialized to and byte arrays.
+//! `stomp_parser` implements a model for STOMP Frames, as specified in the [STOMP Protocol Specification,Version 1.2](https://stomp.github.io/stomp-specification-1.2.html).
+//! These frames can be parsed from and serialized to byte arrays.
 //!
 //! The types primarily of interest to users of the library are the enums `client::ClientFrame` and `server::ServerFrame`, which model the frames that can be sent
 //! by STOMP clients and STOMP servers respectively. Obtaining a frame from a message is achieved via `try_from` on those types.   
@@ -25,10 +25,11 @@
 //! }
 //! ```
 #![warn(clippy::all)]
+#[macro_use]
+mod common;
+pub mod error;
 mod model;
 mod parser;
-
-pub mod error;
 
 pub use model::client;
 pub use model::headers;

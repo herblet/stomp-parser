@@ -1,39 +1,16 @@
-#![doc(hidden)]
-/// This macro is useful for forcing repeat expression - particularly optional
-/// items - without actually outputting anything depending on the input.
-macro_rules! blank {
-    ($in:ident) => {};
-}
-
-macro_rules! true_if_present {
-    ($in:ident) => {
-        true
-    };
-
-    () => {
-        false
-    };
-}
-
-macro_rules! choose_from_presence {
-    ($in:tt $present:tt, $absent:tt) => {
-        $present
-    };
-
-    ($present:tt, $absent:tt) => {
-        $absent
-    };
-}
-
 macro_rules! frame {
     ( $name:ident,  $($comment:literal,)? $command:ident, $origin:ident $(, $header_name:ident : $header_type:ident )* $(,( $(  $opt_header_name:ident : $opt_header_type:ident $(: $opt_header_default:tt $(: $opt_header_default_comment:literal)?)?  ),* ))? $(,[custom: $has_custom:ident])? $(,[body: $has_body:ident])?  $(,$long_comment:literal)*) => {
         paste::paste! {
+
+            sender_frame!($name,  $($comment,)? $command, $origin $(, $header_name : $header_type )* $(,( $(  $opt_header_name : $opt_header_type $(: $opt_header_default $(: $opt_header_default_comment )?)?  ),* ))? $(,[custom: $has_custom])? $(,[body: $has_body])?  $(,$long_comment)*);
+
             $(#[doc = ""$comment]
             #[doc = ""])?
             #[doc = "This frame has required headers "$("`"$header_name"`")","* $(" and optional headers " $("`"$opt_header_name"`")","* )?"."]
             $(#[doc = ""]
             #[doc = ""$long_comment])?
             pub struct $name {
+                raw: Vec<u8>,
             $(
                 #[doc = "The value of the `"$header_name"` header."]
                 pub $header_name: [<$header_type Value>],
@@ -41,7 +18,7 @@ macro_rules! frame {
             $($(
                 #[doc = "The value of the `"$opt_header_name"` header."]
                 $($(#[doc = "Defaults to `"$opt_header_default_comment"` if not supplied."])?)?
-                pub $opt_header_name: choose_from_presence!($($opt_header_default)? [<$opt_header_type Value>],(Option<[<$opt_header_type Value>]>)),
+                pub $opt_header_name: choose_from_presence!($($opt_header_default)? ([<$opt_header_type Value>]),(Option<[<$opt_header_type Value>]>)),
             )*)?
             $(
                 #[allow(unused)]
@@ -50,98 +27,39 @@ macro_rules! frame {
             )?
             $(
                 #[allow(unused)]
-                $has_body: (),
-                body_offset_length: (isize, usize),
-                raw: Option<Vec<u8>>,
+                $has_body: &'static [u8],
             )?
-
-            // prevents construction by external code
-            #[allow(unused)]
-            dummy_private: (),
         }
 
         impl $name {
-            const NAME: &'static str = stringify!($command);
-            #[doc = "Creates a new" $name"."]
-            fn from_parsed( $(
-                $header_name: [<$header_type Value>],
-            )* $($(
-                $opt_header_name: Option<[<$opt_header_type Value>]>,
-            )*)? $(
-                $has_custom: Vec<CustomValue>,
-            )? $(
-                $has_body: (isize, usize),
-            )?
-         )  -> Self {
+            pub const NAME: &'static str = stringify!($command);
+        }
+
+        impl $name {
+
+            fn init(raw: Vec<u8>) -> Self {
                 $name {
-                    $(
-                        $header_name,
-                    )*
+                    raw,
+                     $(
+                $header_name: [<$header_type Value>]::default(),
+            )*
                     $($(
-                        $opt_header_name: choose_from_presence!($(($opt_header_default))? ($opt_header_name.unwrap_or_else($($opt_header_default)?)),($opt_header_name)),
-                    )*)?
-                    $(
-                        $has_custom: (),
-                        custom: $has_custom,
-                    )?
-                    $(
-                        $has_body: (),
-                        body_offset_length: $has_body,
-                        raw: None,
-                    )?
-
-                    dummy_private: ()
-                }
-
-            }
-
-            pub fn new( $(
-                $header_name: [<$header_type Value>],
-            )* $($(
-                $opt_header_name: Option<[<$opt_header_type Value>]>,
+                $opt_header_name: choose_from_presence!($(($opt_header_default))? ([<$opt_header_type Value>]::default()),None),
             )*)? $(
-                $has_custom: Vec<CustomValue>,
+                 #[allow(unused)]
+                $has_custom: (),
+                custom: vec![],
             )? $(
-                $has_body: Vec<u8>,
+                $has_body: &EMPTY,
             )?
-         )  -> Self {
-                $name {
-                    $(
-                        $header_name,
-                    )*
-                    $($(
-                        $opt_header_name: choose_from_presence!($(($opt_header_default))? ($opt_header_name.unwrap_or_else($($opt_header_default)?)),($opt_header_name)),
-                    )*)?
-                    $(
-                        $has_custom: (),
-                        custom: $has_custom,
-                    )?
-                    $(
-                        $has_body: (),
-                        body_offset_length: (0,$has_body.len()),
-                        raw: Some($has_body),
-                    )?
-
-                    dummy_private: ()
-                }
-
             }
+        }
                 $(
-                     blank!($has_body);
                 pub fn body(&self) -> Option<&[u8]> {
-                    select_slice(&self.raw, &self.body_offset_length)
+                    Some(self.$has_body)
                 }
             )?
         }
-
-        $(blank!($has_body);
-        impl crate::parser::HasBody for $name {
-                /// Sets the vector containing the bytes of the body
-                fn set_raw(&mut self, bytes: Vec<u8>) {
-                    self.raw = Some(bytes);
-                }
-            }
-        )?
 
         #[doc = "This implementation serialises [`"$name"`] into a byte array."]
         impl TryInto<Vec<u8>> for $name {
@@ -149,33 +67,7 @@ macro_rules! frame {
 
             fn try_into(self) -> Result<Vec<u8>, Self::Error> {
                 {
-                    let mut result = Vec::new();
-
-                    // STOMP Command
-                    writeln(&mut result, Self::NAME)?;
-
-                    // Required Headers
-                    $( writeln(&mut result, self.$header_name)?; )*
-
-                    // Optional Headers
-                    $($(
-                        choose_from_presence!($($opt_header_default)? { writeln(&mut result, self.$opt_header_name)?; },{self.$opt_header_name.as_ref().map_or(Ok(()),|value| writeln(&mut result, value))?;});
-                    )*)?
-
-                    // End of Headers
-                    result.write(b"\n")?;
-
-
-                    $(
-                        blank!($has_body);
-                        select_slice(&self.raw,&self.body_offset_length)
-                            .map_or(Ok(0),|body|result.write(body))?;
-                    )?
-
-                    // end of frame
-                    result.push(0u8);
-
-                    Ok::<Vec<u8>, std::io::Error>(result)
+                    Ok::<Vec<u8>, std::io::Error>(self.raw)
                 }.map_err(StompParseError::from)
             }
         }
@@ -204,16 +96,20 @@ macro_rules! frame {
 }
 
 macro_rules! frame_parser {
-    ( $name:ident, $origin:ident $(, $header_name:ident : $header_type:ident )* $(,( $(  $opt_header_name:ident : $opt_header_type:ident ),* ))? $(,[custom: $has_custom:ident])? $(,[body: $has_body:ident])? ) => {
+    ( $name:ident, $origin:ident $(, $header_name:ident : $header_type:ident )* $(,( $(  $opt_header_name:ident : $opt_header_type:ident $(: $opt_header_default:tt)?),* ))? $(,[custom: $has_custom:ident])? $(,[body: $has_body:ident])? ) => {
         paste::paste! {
-
             #[allow(unused)]
-            pub fn [<$name:lower _frame>]<'a, E: 'a + FullError<&'a [u8], StompParseError>>(
-                base_offset: *const u8,
-            ) -> Box<dyn Parser<&'a [u8], [<$origin Frame>], E>> {
-                    Box::new({
-                        move |input: &'a [u8]| {
-                        let headers_parser = headers_parser(
+            pub fn [<$name:lower _frame>]<E: 'static + FullError<&'static [u8], StompParseError>>(
+                mut frame: [<$name Frame>]
+            ) -> Result<[<$origin Frame>], StompParseError>{
+
+                let bytes : *const [u8] = frame.raw.as_slice();
+
+                let input = unsafe { bytes.as_ref().unwrap() };
+
+                let (input,_) = command_line::<VerboseError<&[u8]>, StompParseError>(input).map_err(|_|StompParseError::new("Error parsing frame"))?;
+
+                        let headers_parser = headers_parser::<'static, E>(
                                 vec![$(
                             HeaderType::$header_type,
                         )*],
@@ -227,10 +123,11 @@ macro_rules! frame_parser {
                             );
 
                         let body_section = if true_if_present!($($has_body)?) {
-                            remaining_without_null
+                            remaining_without_null::<'static>
                         } else {
                             null
                         };
+
                         let mut fnmut = context(
                             stringify!([<$name _frame>]),
                             map_res(tuple((headers_parser, body_section)), |x| {
@@ -238,12 +135,6 @@ macro_rules! frame_parser {
                                 $(
                                     let mut $header_name: Option<[<$header_type Value>]> = None;
                                 )*
-                                $($(
-                                    let mut $opt_header_name: Option<[<$opt_header_type Value>]> = None;
-                                )*)?
-                                $(
-                                    let mut $has_custom = Vec::new();
-                                )?
 
                                 for header in headers {
                                     match header {
@@ -251,43 +142,39 @@ macro_rules! frame_parser {
                                         Header::$header_type(val) => { $header_name = Some(val); }
                                         )*
                                         $($(
-                                        Header::$opt_header_type(val) => { $opt_header_name = Some(val); }
+                                        Header::$opt_header_type(val) => { frame.$opt_header_name = choose_from_presence!( $($opt_header_default)? val, (Some(val))); }
                                         )*)?
                                         $(
-                                        Header::Custom(val)=> { $has_custom.push(val); }
+                                        Header::Custom(val)=> {
+                                            blank!($has_custom);
+                                            frame.custom.push(val);
+                                        }
                                         )?
-                                        _ => {return Err(StompParseError::new(format!("Unexpected header: {:?}",header)));}
+                                        _ => {Err(StompParseError::new(format!("Unexpected header: {:?}",header)))?;}
                                     }
                                 }
 
+
                                 $(
-                                let $has_body =
-                                    unsafe { (x.1.as_ptr().offset_from(base_offset), x.1.len()) };
-                                    )?
+                                    frame.$header_name = $header_name.ok_or_else(|| StompParseError::new(format!("Missing required header of type: {:?}",HeaderType::$header_type)))?;
+                                )*
 
-                                Ok([<$origin Frame>]::$name([<$name Frame>]::from_parsed(
-                                    $(
-                                        $header_name.ok_or_else(|| StompParseError::new(format!("Missing required header of type: {:?}",HeaderType::$header_type)))?,
-                                    )*
-                                    $($(
-                                        $opt_header_name,
-                                    )*)?
-                                    $(
-                                        $has_custom,
-                                    )?
-                                    $(
-                                        $has_body,
-                                    )?
-                                )))
-                            }),
-                        );
+                                //         $has_custom,
+                                //     )?
+                                $(
+                                frame.$has_body =  x.1;
+                                )?
 
-                        let res = fnmut(input);
+                                Ok(())
+                            }
+                        ));
+
+                        fnmut(input).map_err(|_|StompParseError::new("Error parsing frame"))?;
                         drop(fnmut);
-                        res
+                        Ok([<$origin Frame>]::$name(frame))
                     }
-                })
-            }
+
+
         }
     };
 }
@@ -298,11 +185,14 @@ macro_rules! frames {
             ( $name:ident, $($comment:literal,)? $command:ident$(|$alias:ident)*, $origin:ident $(, $header_name:ident : $header_type:ident )* $(,( $(  $opt_header_name:ident : $opt_header_type:ident $(: $opt_header_default:tt$(: $opt_header_default_comment:literal)?)?),* ))? $(,[custom: $has_custom:ident])? $(,[body: $has_body:ident])? $(,$long_comment:literal)* )
         ),+
     } => {
+        use crate::common::constants::*;
+        use crate::common::functions::*;
+
         use crate::error::StompParseError;
-        use crate::model::frames::utils::*;
+        //use crate::model::frames::utils::*;
 
         use std::convert::{TryFrom, TryInto};
-        use std::io::Write;
+        //use std::io::Write;
 
         paste::paste! {
             $(
@@ -327,17 +217,6 @@ macro_rules! frames {
                     $(#[doc=$comment])?
                     $name([<$name Frame>])
                 ),+
-            }
-
-            impl crate::parser::HasBody for [<$group_name Frame>] {
-                fn set_raw(&mut self, bytes: Vec<u8>) {
-                    match self {
-                        $(
-                            $([<$group_name Frame>]::$name(frame) => { blank!($has_body); frame.set_raw(bytes);})?
-                        )+
-                        _ => { /* Frames with no body do nothing */ }
-                    }
-                }
             }
 
             #[doc = "This implementation serialises [`"$group_name Frame"`] into a byte array."]
@@ -374,56 +253,51 @@ macro_rules! frames {
             mod parsers {
                 use super::*;
                 use crate::parser::headers::headers_parser;
-                use crate::parser::{null,remaining_without_null, Switch, command_line, always_fail, HasBody};
+                use crate::parser::{null,remaining_without_null, command_line};
                 use crate::error::FullError;
                 use crate::error::StompParseError;
                 use nom::combinator::map_res;
                 use nom::error::context;
                 use nom::error::VerboseError;
                 use nom::sequence::tuple;
-                use nom::{IResult, Parser};
                  $(
                     frame_parser! (
                         $name,
                         $group_name
                         $(, $header_name : $header_type )*
-                        $(,( $(  $opt_header_name : $opt_header_type ),* ))?
+                        $(,( $(  $opt_header_name : $opt_header_type $(: $opt_header_default )? ),* ))?
                         $(,[custom: $has_custom])?
                         $(,[body: $has_body])?
                     );
                 )+
 
-                fn command<'a, E: 'a + FullError<&'a [u8], StompParseError>>(
-                    input: &'a [u8],
-                ) -> IResult<&'a [u8], [<$group_name Frame>], E> {
-                    Switch::<'a, fn(&'a [u8]) -> IResult<&[u8], &[u8], E>, [<$group_name Frame>], E, StompParseError>::new(
-                        command_line,
-                        vec![
-                            $(
-                                (stringify!($command), [<$name:lower _frame>](input.as_ptr())),
-                                $((stringify!($alias), [<$name:lower _frame>](input.as_ptr())),)*
-                            )+
-                        ],
-                        Box::new(always_fail),
-                    )
-                    .parse(input)
-                }
-
-                /// The entry point to this package, which parses a frame in this group
-                pub fn [<$group_name:lower _frame>]<'a, 'b>(input: Vec<u8>) -> Result<[<$group_name Frame>], StompParseError>
-                where
-                    'b: 'a,
+                pub fn [<$group_name:lower _frame>](input: Vec<u8>) -> Result<[<$group_name Frame>], StompParseError>
                 {
-                    let parser = |input: &'b [u8]| command::<VerboseError<&'b [u8]>>(input);
+                    let slice = input.as_slice();
 
-                    let result = nom::dbg_dmp(parser, "frame")(input.as_slice());
+                    let (_,command_string) = command_line::<VerboseError<&[u8]>, StompParseError>(slice).map_err(|_|StompParseError::new("Error parsing frame"))?;
 
-                    match result {
-                        Err(_) => Err(StompParseError::new("Error parsing frame")),
-                        Ok((_, mut client_frame)) => {
-                            client_frame.set_raw(input);
-                            Ok(client_frame)
+                    let initialiser: Box<dyn FnOnce(Vec<u8>)-> [<$group_name Frame>]> = std::str::from_utf8(command_string)
+                        .map_err(|_|StompParseError::new("badly formed command string, not utf8"))
+                        .and_then(move |command_string| match command_string {
+                            $(
+
+                                stringify!($command) => Ok(Box::new(|input|[<$group_name Frame>]::$name([<$name Frame>]::init(input))) as Box<dyn FnOnce(Vec<u8>)-> [<$group_name Frame>]>),
+                                $(
+                                    stringify!($alias) => Ok(Box::new(|input|[<$group_name Frame>]::$name([<$name Frame>]::init(input)))),
+                                )*
+                            )+
+                            _ => Err(StompParseError::new(format!("Unknown command {}", command_string)))
+                        })?;
+
+                    let frame = initialiser(input);
+
+                    match frame {
+                        $(
+                        [<$group_name Frame>]::$name(inner) =>  {
+                            [<$name:lower _frame>]::<VerboseError<&[u8]>>(inner)
                         }
+                        )+
                     }
                 }
 

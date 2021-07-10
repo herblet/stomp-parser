@@ -1,12 +1,16 @@
 #[macro_use]
+mod sender;
+#[macro_use]
 mod macros;
+
 mod utils;
+
 #[allow(non_snake_case)]
 #[allow(unused_parens)]
 #[allow(clippy::new_without_default)]
 pub mod client {
     //! Implements the model for the frames that a STOMP client can send, as specified in
-    //! the [STOMP Protocol Spezification,Version 1.2](https://stomp.github.io/stomp-specification-1.2.html).
+    //! the [STOMP Protocol Specification,Version 1.2](https://stomp.github.io/stomp-specification-1.2.html).
 
     use crate::model::headers::*;
 
@@ -109,27 +113,6 @@ pub mod client {
     }
 
     impl SendFrame {}
-
-    #[cfg(test)]
-    mod test {
-        use crate::{headers::*, parser::HasBody};
-
-        #[test]
-        fn body_extracts_correct_slice() {
-            let mut frame = super::SendFrame::from_parsed(
-                DestinationValue::new("foo".to_owned()),
-                None,
-                None,
-                None,
-                None,
-                Vec::default(),
-                (2, 3),
-            );
-            frame.set_raw(vec![0, 1, 2, 3, 4, 5, 6, 7]);
-
-            assert_eq!(b"\x02\x03\x04", frame.body().unwrap());
-        }
-    }
 }
 
 #[allow(non_snake_case)]
@@ -137,7 +120,7 @@ pub mod client {
 #[allow(clippy::new_without_default)]
 pub mod server {
     //! Implements the model for the frames that a STOMP server can send, as specified in the
-    //! [STOMP Protocol Spezification,Version 1.2](https://stomp.github.io/stomp-specification-1.2.html).
+    //! [STOMP Protocol Specification,Version 1.2](https://stomp.github.io/stomp-specification-1.2.html).
     use crate::model::headers::*;
     frames! {
         Server,
@@ -161,6 +144,7 @@ pub mod server {
             Error,
             ERROR,
             Server,
+            (message: Message),
             [custom: cus],
             [body: body]),
         (
@@ -174,13 +158,14 @@ pub mod server {
                 content_type: ContentType,
                 content_length: ContentLength
             ),
+            [custom: cus],
             [body: body]
         )
     }
 
     impl ErrorFrame {
         pub fn from_message(message: &str) -> Self {
-            ErrorFrame::new(Vec::<CustomValue>::new(), message.as_bytes().to_owned())
+            ErrorFrameBuilder::new().message(message.to_owned()).build()
         }
     }
 }
@@ -188,12 +173,20 @@ pub mod server {
 #[cfg(test)]
 #[macro_use]
 mod test {
-    use super::client::ClientFrame;
-    use super::client::SendFrame;
+    use super::client::*;
     use super::server::*;
+
     use crate::model::headers::*;
     use std::convert::TryFrom;
     use std::convert::TryInto;
+    use std::thread;
+
+    #[test]
+    fn new_builder_can_be_build() {
+        let frame = SendFrameBuilder::new("foo/bar".to_owned()).build();
+
+        assert_eq!("foo/bar", Into::<&str>::into(frame.destination));
+    }
 
     #[test]
     fn parses_stomp_frame() {
@@ -212,15 +205,12 @@ mod test {
 
     #[test]
     fn writes_connected_frame() {
-        let frame = ConnectedFrame::new(
-            VersionValue::new(StompVersion::V1_1),
-            Some(HeartBeatValue::new(HeartBeatIntervalls {
+        let frame = ConnectedFrameBuilder::new(StompVersion::V1_1)
+            .heartbeat(HeartBeatIntervalls {
                 supplied: 20,
                 expected: 10,
-            })),
-            None,
-            None,
-        );
+            })
+            .build();
 
         let displayed = frame.to_string();
 
@@ -234,81 +224,166 @@ mod test {
     fn writes_message_frame() {
         let body = b"Lorem ipsum dolor sit amet,".to_vec();
 
-        let frame = MessageFrame::new(
-            MessageIdValue::new("msg-1".to_owned()),
-            DestinationValue::new("path/to/hell".to_owned()),
-            SubscriptionValue::new("annual".to_owned()),
-            Some(ContentTypeValue::new("foo/bar".to_owned())),
+        let frame = MessageFrameBuilder::new(
+            "msg-1".to_owned(),
+            "path/to/hell".to_owned(),
+            "annual".to_owned(),
+        )
+        .content_type("foo/bar".to_owned())
+        .body(body)
+        .build();
+
+        assert_message_frame_roundtrip(
+            frame,
+            "msg-1",
+            "path/to/hell",
+            "annual",
+            Some("foo/bar"),
             None,
-            body,
-        );
-
-        let displayed = frame.to_string();
-
-        assert_eq!(
-            "MESSAGE\n\
-            message-id:msg-1\n\
-            destination:path/to/hell\n\
-            subscription:annual\n\
-            content-type:foo/bar\n\
-            \n\
-            Lorem ipsum dolor sit amet,\u{00}",
-            displayed
+            &vec![],
+            Some(b"Lorem ipsum dolor sit amet,"),
         );
     }
 
     #[test]
-    fn writes_message_frame_bytes() {
+    fn writes_custom_headers() {
         let body = b"Lorem ipsum dolor sit amet,".to_vec();
 
-        let frame = MessageFrame::new(
-            MessageIdValue::new("msg-1".to_owned()),
-            DestinationValue::new("path/to/hell".to_owned()),
-            SubscriptionValue::new("annual".to_owned()),
-            Some(ContentTypeValue::new("foo/bar".to_owned())),
+        let frame = MessageFrameBuilder::new(
+            "msg-1".to_owned(),
+            "path/to/hell".to_owned(),
+            "annual".to_owned(),
+        )
+        .content_type("foo/bar".to_owned())
+        .add_custom_header("hello".to_owned(), "world".to_owned())
+        .body(body)
+        .build();
+
+        assert_message_frame_roundtrip(
+            frame,
+            "msg-1",
+            "path/to/hell",
+            "annual",
+            Some("foo/bar"),
             None,
-            body,
+            &vec![("hello", "world")],
+            Some(b"Lorem ipsum dolor sit amet,"),
+        );
+    }
+
+    fn assert_message_frame_roundtrip(
+        frame: MessageFrame,
+        expected_id: &str,
+        expected_dest: &str,
+        expected_sub: &str,
+        expected_content_type: Option<&str>,
+        expected_content_length: Option<u32>,
+        expected_custom: &Vec<(&str, &str)>,
+        expected_body: Option<&[u8]>,
+    ) {
+        assert_message_frame(
+            &frame,
+            expected_id,
+            expected_dest,
+            expected_sub,
+            expected_content_type,
+            expected_content_length,
+            expected_custom,
+            expected_body,
         );
 
         let bytes: Vec<u8> = frame.try_into().expect("Error writing bytes");
 
+        if let Ok(ServerFrame::Message(frame)) = ServerFrame::try_from(bytes) {
+            assert_message_frame(
+                &frame,
+                expected_id,
+                expected_dest,
+                expected_sub,
+                expected_content_type,
+                expected_content_length,
+                expected_custom,
+                expected_body,
+            );
+        } else {
+            panic!("Should have received a Message frame")
+        }
+    }
+
+    fn assert_message_frame(
+        frame: &MessageFrame,
+        expected_id: &str,
+        expected_dest: &str,
+        expected_sub: &str,
+        expected_content_type: Option<&str>,
+        expected_content_length: Option<u32>,
+        expected_custom: &Vec<(&str, &str)>,
+        expected_body: Option<&[u8]>,
+    ) {
         assert_eq!(
-            b"MESSAGE\n\
-            message-id:msg-1\n\
-            destination:path/to/hell\n\
-            subscription:annual\n\
-            content-type:foo/bar\n\
-            \n\
-            Lorem ipsum dolor sit amet,\x00",
-            bytes.as_slice()
+            frame.message_id.value(),
+            expected_id,
+            "MessageId does not match"
         );
+        assert_eq!(
+            frame.destination.value(),
+            expected_dest,
+            "Destination does not match"
+        );
+        assert_eq!(
+            frame.subscription.value(),
+            expected_sub,
+            "Subscription does not match"
+        );
+        assert_eq!(
+            frame.content_type.as_ref().map(|value| value.value()),
+            expected_content_type,
+            "content-type does not match"
+        );
+
+        assert_eq!(
+            frame.content_length.as_ref().map(|value| value.value()),
+            expected_content_length.as_ref(),
+            "content-length does not match"
+        );
+        expected_custom.iter().for_each(|(name, value)| {
+            assert!(
+                frame
+                    .custom
+                    .iter()
+                    .any(|custom_value| custom_value.header_name() == *name
+                        && custom_value.value() == value),
+                "Missing custom value {}:{}",
+                name,
+                value
+            );
+        });
+
+        assert_eq!(frame.body(), expected_body, "Body does not match");
     }
 
     #[test]
     fn writes_binary_message_frame() {
         let body = vec![0, 1, 1, 2, 3, 5, 8, 13];
 
-        let frame = MessageFrame::new(
-            MessageIdValue::new("msg-1".to_owned()),
-            DestinationValue::new("path/to/hell".to_owned()),
-            SubscriptionValue::new("annual".to_owned()),
-            Some(ContentTypeValue::new("foo/bar".to_owned())),
+        let frame = MessageFrameBuilder::new(
+            "msg-1".to_owned(),
+            "path/to/hell".to_owned(),
+            "annual".to_owned(),
+        )
+        .content_type("foo/bar".to_owned())
+        .body(body)
+        .build();
+
+        assert_message_frame_roundtrip(
+            frame,
+            "msg-1",
+            "path/to/hell",
+            "annual",
+            Some("foo/bar"),
             None,
-            body,
-        );
-
-        let bytes: Vec<u8> = frame.try_into().expect("Error writing bytes");
-
-        assert_eq!(
-            b"MESSAGE\n\
-            message-id:msg-1\n\
-            destination:path/to/hell\n\
-            subscription:annual\n\
-            content-type:foo/bar\n\
-            \n\
-            \x00\x01\x01\x02\x03\x05\x08\x0d\
-            \x00",
-            bytes.as_slice()
+            &vec![],
+            Some(&[0, 1, 1, 2, 3, 5, 8, 13]),
         );
     }
 
@@ -327,6 +402,78 @@ mod test {
             );
         } else {
             panic!("Send Frame not parsed correctly");
+        }
+    }
+
+    fn assert_in_range(ptr: *const u8, len: usize, actual: *const u8) {
+        let offset = unsafe { actual.offset_from(ptr) };
+
+        if offset < 0 || offset > (len as isize) {
+            panic!("offset {} not in range of {}", offset, len);
+        }
+    }
+
+    #[test]
+    fn does_not_copy() {
+        let message = b"SEND\n\
+            destination:stairway/to/heaven\n\
+            funky:doodle\n\
+            \n\
+            Lorem ipsum dolor sit amet,...\x00"
+            .to_vec();
+
+        let source_ptr = message.as_ptr();
+        let source_len = message.len();
+
+        if let Ok(ClientFrame::Send(frame)) = ClientFrame::try_from(message) {
+            assert_in_range(source_ptr, source_len, frame.body().unwrap().as_ptr());
+            assert_in_range(source_ptr, source_len, frame.destination.value().as_ptr());
+            assert_in_range(source_ptr, source_len, frame.custom[0].value().as_ptr());
+            assert_in_range(
+                source_ptr,
+                source_len,
+                frame.custom[0].header_name().as_ptr(),
+            );
+        } else {
+            panic!("Send Frame not parsed correctly");
+        }
+    }
+
+    #[test]
+    fn works_after_move() {
+        let message = b"SEND\n\
+            destination:stairway/to/heaven\n\
+            \n\
+            Lorem ipsum dolor sit amet,...\x00"
+            .to_vec();
+
+        let src_ptr = message.as_ptr() as u64;
+        let len = message.len();
+        let parsed = ClientFrame::try_from(message);
+
+        let handle = thread::spawn(move || {
+            if let Ok(ClientFrame::Send(frame)) = parsed {
+                assert_eq!(
+                    "Lorem ipsum dolor sit amet,...",
+                    std::str::from_utf8(frame.body().unwrap()).unwrap()
+                );
+
+                assert_eq!("stairway/to/heaven", frame.destination.value());
+                return frame.body().unwrap().as_ptr() as u64;
+            } else {
+                panic!("Send Frame not parsed correctly");
+            }
+        });
+
+        if let Ok(address) = handle.join() {
+            println!(
+                "Source: {}, Len: {}, Offset: {} ",
+                src_ptr,
+                len,
+                address - src_ptr,
+            );
+        } else {
+            panic!("Error after move")
         }
     }
 

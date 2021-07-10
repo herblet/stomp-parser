@@ -2,97 +2,16 @@ pub mod headers;
 
 use nom::bytes::complete::is_not;
 use nom::character::complete::{char, line_ending};
-use nom::combinator::{eof, map_parser};
-use nom::error::{context, ErrorKind, ParseError};
-use nom::lib::std::collections::HashMap;
+use nom::combinator::eof;
+use nom::error::context;
 use nom::sequence::terminated;
-use nom::{Err, IResult, Needed, Parser};
-use std::marker::PhantomData;
-use std::str;
+use nom::{IResult, Needed};
 
 use crate::error::FullError;
 use crate::error::StompParseError;
 
 pub trait HasBody {
     fn set_raw(&mut self, bytes: Vec<u8>);
-}
-
-/// A Parser which holds keyword -> parser maps, and applies the later when the former is
-/// encountered
-pub struct Switch<'a, KP, O, E, E2>
-where
-    KP: Parser<&'a [u8], &'a [u8], E>,
-    E: 'a + FullError<&'a [u8], E2>,
-{
-    keyword_matcher: KP,
-    parsers_by_keyword: HashMap<&'static str, Box<dyn Parser<&'a [u8], O, E> + 'a>>,
-    default_parser: Box<dyn Parser<&'a [u8], O, E> + 'a>,
-    phantom: PhantomData<&'a O>,
-    phantom2: PhantomData<&'a E>,
-    phantom3: PhantomData<&'a E2>,
-}
-
-impl<'a, KP, O, E, E2> Switch<'a, KP, O, E, E2>
-where
-    KP: Parser<&'a [u8], &'a [u8], E>,
-    E: 'a + FullError<&'a [u8], E2>,
-{
-    /// Constructs a Switch, initialising permanent data-structures that help to deliver
-    /// good performance.
-    pub fn new(
-        keyword_matcher: KP,
-        entries: Vec<(&'static str, Box<dyn Parser<&'a [u8], O, E> + 'a>)>,
-        default_parser: Box<dyn Parser<&'a [u8], O, E> + 'a>,
-    ) -> Switch<'a, KP, O, E, E2> {
-        let mut parsers_by_keyword = HashMap::new();
-
-        for (keyword, parser) in entries {
-            parsers_by_keyword.insert(keyword, parser);
-        }
-
-        Switch {
-            keyword_matcher,
-            parsers_by_keyword,
-            default_parser,
-            phantom: PhantomData,
-            phantom2: PhantomData,
-            phantom3: PhantomData,
-        }
-    }
-
-    fn resolve_parser(&mut self, keyword: &str) -> &mut Box<dyn Parser<&'a [u8], O, E> + 'a> {
-        match self.parsers_by_keyword.get_mut(keyword) {
-            Some(parser) => parser,
-            None => &mut self.default_parser,
-        }
-    }
-}
-
-impl<'a, KP, O, E, E2> Parser<&'a [u8], O, E> for Switch<'a, KP, O, E, E2>
-where
-    KP: Parser<&'a [u8], &'a [u8], E> + Fn(&'a [u8]) -> IResult<&'a [u8], &'a [u8], E>,
-    E: 'a + FullError<&'a [u8], E2>,
-{
-    fn parse(&mut self, input: &'a [u8]) -> IResult<&'a [u8], O, E> {
-        let res = map_parser(&self.keyword_matcher, to_string)(input)?;
-
-        self.resolve_parser(res.1).parse(res.0)
-    }
-}
-
-fn to_string<'a, E>(bytes: &'a [u8]) -> IResult<&'a [u8], &'a str, E>
-where
-    E: ParseError<&'a [u8]>,
-{
-    str::from_utf8(bytes)
-        .map_err(|_| nom::Err::Failure(E::from_error_kind(bytes, ErrorKind::Char)))
-        .map(|output| (&bytes[..0], output))
-}
-
-pub fn always_fail<'a, O, E: FullError<&'a [u8], StompParseError>>(
-    input: &'a [u8],
-) -> IResult<&[u8], O, E> {
-    Err(Err::Failure(E::from_error_kind(input, ErrorKind::Tag)))
 }
 
 pub fn null<'a, E: 'a + FullError<&'a [u8], StompParseError>>(
@@ -123,7 +42,7 @@ pub fn remaining_without_null<'a, E: FullError<&'a [u8], StompParseError>>(
 #[cfg(test)]
 mod tests {
     use crate::client::ClientFrame;
-    use crate::headers::{AckType, HeaderValue, HeartBeatIntervalls, StompVersion, StompVersions};
+    use crate::headers::{AckType, HeartBeatIntervalls, StompVersion, StompVersions};
     use std::convert::TryFrom;
 
     #[test]
@@ -144,7 +63,7 @@ mod tests {
                     ]),
                     *frame.accept_version.value()
                 );
-                assert_eq!("b", *frame.host.value());
+                assert_eq!("b", frame.host.value());
                 assert_eq!(None, frame.login);
                 assert_eq!(None, frame.passcode);
             }
@@ -162,8 +81,8 @@ mod tests {
         );
         match frame.unwrap() {
             ClientFrame::Connect(frame) => {
-                assert_eq!("slarti", *frame.login.as_ref().unwrap().value());
-                assert_eq!("bartfast", *frame.passcode.as_ref().unwrap().value());
+                assert_eq!("slarti", frame.login.as_ref().unwrap().value());
+                assert_eq!("bartfast", frame.passcode.as_ref().unwrap().value());
             }
             _ => panic!("Not a Connect Frame!"),
         }
@@ -253,8 +172,8 @@ mod tests {
         .unwrap();
 
         if let ClientFrame::Subscribe(frame) = frame {
-            assert_eq!("y/b", *frame.destination.value());
-            assert_eq!("1", *frame.id.value());
+            assert_eq!("y/b", frame.destination.value());
+            assert_eq!("1", frame.id.value());
             assert_eq!(AckType::Client, *frame.ack_type.value())
         } else {
             panic!("Not a SUBSCRIBE");
