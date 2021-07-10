@@ -9,10 +9,10 @@ macro_rules! sender_frame {
             #[doc = ""$long_comment])?
             pub struct [<$name Builder>] {
                 $(
-                    $header_name: Option<<[<$header_type Value>]<'static> as HeaderValue<'static>>::OwnedValue>,
+                    $header_name: Option<<[<$header_type Value>] as HeaderValue>::OwnedValue>,
                 )*
                 $($(
-                    $opt_header_name: Option<<[<$opt_header_type Value>]<'static> as HeaderValue<'static>>::OwnedValue>,
+                    $opt_header_name: Option<<[<$opt_header_type Value>] as HeaderValue>::OwnedValue>,
                 )*)?
                 $(
                     #[doc(hidden)]
@@ -29,7 +29,7 @@ macro_rules! sender_frame {
             impl [<$name Builder>] {
                 $(
                     #[doc = "The value of the `"$header_name"` header."]
-                    pub fn $header_name<'a,'b>(&'b mut self, new_val: <[<$header_type Value>]<'a> as HeaderValue<'a>>::OwnedValue) -> &'b mut [<$name Builder>] {
+                    pub fn $header_name(mut self, new_val: <[<$header_type Value>] as HeaderValue>::OwnedValue) -> [<$name Builder>] {
 
                         self.$header_name = Some(new_val);
 
@@ -39,7 +39,7 @@ macro_rules! sender_frame {
                 $($(
                     #[doc = "The value of the `"$opt_header_name"` header."]
                     $($(#[doc = "Defaults to `"$opt_header_default_comment"` if not supplied."])?)?
-                    pub fn $opt_header_name<'a>(&'a mut self, new_val: <[<$opt_header_type Value>]<'a> as HeaderValue<'a>>::OwnedValue) -> &'a mut [<$name Builder>] {
+                    pub fn $opt_header_name(mut self, new_val: <[<$opt_header_type Value>] as HeaderValue>::OwnedValue) -> [<$name Builder>] {
                         self.$opt_header_name = Some(new_val);
 
                         self
@@ -47,14 +47,14 @@ macro_rules! sender_frame {
                 )*)?
                 $(
                     #[doc = "Useseless doc: `"$has_custom"`."]
-                    pub fn add_custom_header<'a>(&'a mut self, name: String, value: String) -> &'a mut [<$name Builder>] {
+                    pub fn add_custom_header(mut self, name: String, value: String) -> [<$name Builder>] {
                         self.custom.push((name, value));
                         self
                     }
                 )?
                 $(
                     #[doc = "Useseless doc: `"$has_body"`."]
-                    pub fn body<'a>(&'a mut self, new_value: Vec<u8>) -> &'a mut [<$name Builder>] {
+                    pub fn body(mut self, new_value: Vec<u8>) -> [<$name Builder>] {
                         self.body = Some(new_value);
                         self
                     }
@@ -63,7 +63,7 @@ macro_rules! sender_frame {
                 pub fn new() -> [<$name Builder>] {
                     [<$name Builder>] {
                         $(
-                            $header_name: Option::<<[<$header_type Value>]<'static> as HeaderValue<'static>>::OwnedValue>::None,
+                            $header_name: Option::<<[<$header_type Value>] as HeaderValue>::OwnedValue>::None,
                         )*
                         $($(
                             $opt_header_name: choose_from_presence!($($opt_header_default)? {Some($($opt_header_default)?().into())},{None}),
@@ -77,7 +77,7 @@ macro_rules! sender_frame {
                     }
                 }
 
-                pub fn build(mut self) -> Result<$name<'static>, StompParseError> {
+                pub fn build(mut self) -> Result<$name, StompParseError> {
                     // First, build the byte array
                     let mut bytes : Vec<u8> = Vec::with_capacity(1000);
                     let bytes_ref = &mut bytes;
@@ -141,10 +141,6 @@ macro_rules! sender_frame {
 
                     $(
                     let mut [<_ $has_body>] = ();
-
-                    if let None = self.body {
-                        return Err(StompParseError::new("Body not set."));
-                    }
 
                     let body_range = self.body.take().as_mut().map(|body| write_body(bytes_ref, body));
                     )?

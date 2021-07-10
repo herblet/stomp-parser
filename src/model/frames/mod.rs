@@ -112,7 +112,7 @@ pub mod client {
         )
     }
 
-    impl<'a> SendFrame<'a> {}
+    impl SendFrame {}
 }
 
 #[allow(non_snake_case)]
@@ -144,6 +144,7 @@ pub mod server {
             Error,
             ERROR,
             Server,
+            (message: Message),
             [custom: cus],
             [body: body]),
         (
@@ -162,9 +163,12 @@ pub mod server {
         )
     }
 
-    impl<'a> ErrorFrame<'a> {
+    impl ErrorFrame {
         pub fn from_message(message: &str) -> Self {
-            ErrorFrame::new(Vec::<CustomValue>::new(), message.as_bytes().to_owned())
+            ErrorFrameBuilder::new()
+                .message(message.to_owned())
+                .build()
+                .unwrap()
         }
     }
 }
@@ -196,15 +200,14 @@ mod test {
 
     #[test]
     fn writes_connected_frame() {
-        let frame = ConnectedFrame::new(
-            VersionValue::new(StompVersion::V1_1),
-            Some(HeartBeatValue::new(HeartBeatIntervalls {
+        let frame = ConnectedFrameBuilder::new()
+            .version(StompVersion::V1_1)
+            .heartbeat(HeartBeatIntervalls {
                 supplied: 20,
                 expected: 10,
-            })),
-            None,
-            None,
-        );
+            })
+            .build()
+            .unwrap();
 
         let displayed = frame.to_string();
 
@@ -218,16 +221,14 @@ mod test {
     fn writes_message_frame() {
         let body = b"Lorem ipsum dolor sit amet,".to_vec();
 
-        let mut builder = MessageFrameBuilder::new();
-
-        builder
+        let frame = MessageFrameBuilder::new()
             .message_id("msg-1".to_owned())
             .destination("path/to/hell".to_owned())
             .subscription("annual".to_owned())
             .content_type("foo/bar".to_owned())
-            .body(body);
-
-        let frame = builder.build().expect("Should be ok");
+            .body(body)
+            .build()
+            .expect("Should be ok");
 
         assert_message_frame_roundtrip(
             frame,
@@ -245,17 +246,15 @@ mod test {
     fn writes_custom_headers() {
         let body = b"Lorem ipsum dolor sit amet,".to_vec();
 
-        let mut builder = MessageFrameBuilder::new();
-
-        builder
+        let frame = MessageFrameBuilder::new()
             .message_id("msg-1".to_owned())
             .destination("path/to/hell".to_owned())
             .subscription("annual".to_owned())
             .content_type("foo/bar".to_owned())
             .add_custom_header("hello".to_owned(), "world".to_owned())
-            .body(body);
-
-        let frame = builder.build().expect("Should be ok");
+            .body(body)
+            .build()
+            .expect("Should be ok");
 
         assert_message_frame_roundtrip(
             frame,
@@ -270,7 +269,7 @@ mod test {
     }
 
     fn assert_message_frame_roundtrip(
-        frame: MessageFrame<'static>,
+        frame: MessageFrame,
         expected_id: &str,
         expected_dest: &str,
         expected_sub: &str,
@@ -309,7 +308,7 @@ mod test {
     }
 
     fn assert_message_frame(
-        frame: &MessageFrame<'static>,
+        frame: &MessageFrame,
         expected_id: &str,
         expected_dest: &str,
         expected_sub: &str,
@@ -350,7 +349,7 @@ mod test {
                     .custom
                     .iter()
                     .any(|custom_value| custom_value.header_name() == *name
-                        && custom_value.value() == *value),
+                        && custom_value.value() == value),
                 "Missing custom value {}:{}",
                 name,
                 value
@@ -364,16 +363,14 @@ mod test {
     fn writes_binary_message_frame() {
         let body = vec![0, 1, 1, 2, 3, 5, 8, 13];
 
-        let mut builder = MessageFrameBuilder::new();
-
-        builder
+        let frame = MessageFrameBuilder::new()
             .message_id("msg-1".to_owned())
             .destination("path/to/hell".to_owned())
             .subscription("annual".to_owned())
             .content_type("foo/bar".to_owned())
-            .body(body);
-
-        let frame = builder.build().expect("Should be ok");
+            .body(body)
+            .build()
+            .expect("Should be ok");
 
         assert_message_frame_roundtrip(
             frame,

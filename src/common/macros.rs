@@ -48,3 +48,11 @@ macro_rules! choose_from_presence {
         $absent
     };
 }
+
+macro_rules! if_not_present {
+    ($in:tt ($absent:item)) => {};
+
+    (($absent:item)) => {
+        $absent
+    };
+}

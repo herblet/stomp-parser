@@ -42,7 +42,7 @@ pub fn remaining_without_null<'a, E: FullError<&'a [u8], StompParseError>>(
 #[cfg(test)]
 mod tests {
     use crate::client::ClientFrame;
-    use crate::headers::{AckType, HeaderValue, HeartBeatIntervalls, StompVersion, StompVersions};
+    use crate::headers::{AckType, HeartBeatIntervalls, StompVersion, StompVersions};
     use std::convert::TryFrom;
 
     #[test]

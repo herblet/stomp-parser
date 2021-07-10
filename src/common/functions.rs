@@ -1,3 +1,7 @@
+use either::Either;
+
+use crate::error::StompParseError;
+
 use super::constants::{HEADER_PARTS_SEPARATOR, LINE_SEPARATOR, TERMINATOR};
 
 pub fn extend_from_vec(bytes: &mut Vec<u8>, extension: &mut Vec<u8>) -> (usize, usize) {
@@ -57,6 +61,54 @@ pub fn write_body(bytes: &mut Vec<u8>, body: &mut Vec<u8>) -> (usize, usize) {
 
 pub fn write_frame_end(bytes: &mut Vec<u8>) {
     bytes.extend_from_slice(TERMINATOR);
+}
+
+pub fn decode_escape_sequence(slice: &str) -> Result<char, StompParseError> {
+    match slice {
+        "\\\\" => Ok('\\'),
+        "\\r" => Ok('\r'),
+        "\\n" => Ok('\n'),
+        "\\c" => Ok(':'),
+        _ => Err(StompParseError::new(format!(
+            "Unknown escape sequence: '{}'",
+            slice
+        ))),
+    }
+}
+
+pub fn decode_str(raw: &str) -> Result<Either<&str, String>, StompParseError> {
+    match raw.find('\\') {
+        None => Ok(Either::Left(raw)),
+        Some(index) => {
+            let mut buffer = String::with_capacity(raw.len());
+            decode_at_and_continue(&mut buffer, raw, index)?;
+            Ok(Either::Right(buffer))
+        }
+    }
+}
+
+fn decode_at_and_continue(
+    buffer: &mut String,
+    slice: &str,
+    index: usize,
+) -> Result<(), StompParseError> {
+    buffer.push_str(&slice[..index]);
+    if index < slice.len() - 1 {
+        buffer.push(decode_escape_sequence(&slice[index..index + 2])?);
+        decode_slice(buffer, &slice[index + 2..])
+    } else {
+        Err(StompParseError::new("input ends with control character \\"))
+    }
+}
+
+fn decode_slice(buffer: &mut String, slice: &str) -> Result<(), StompParseError> {
+    match slice.find('\\') {
+        None => {
+            buffer.push_str(slice);
+            Ok(())
+        }
+        Some(index) => decode_at_and_continue(buffer, slice, index),
+    }
 }
 
 #[cfg(test)]

@@ -13,17 +13,25 @@ use crate::error::{FullError, StompParseError};
 use crate::model::headers::parser::*;
 use crate::model::headers::*;
 
-#[allow(type_alias_bounds)]
-type HeaderParser<'a, E: 'static + FullError<&'a [u8], StompParseError>> =
-    dyn FnMut(&'a [u8]) -> IResult<&'a [u8], Header, E> + 'a;
+trait HeaderParser<'a, E: FullError<&'a [u8], StompParseError>>:
+    FnMut(&'a [u8]) -> IResult<&'a [u8], Header, E> + 'a
+{
+}
+
+impl<'a, E, T> HeaderParser<'a, E> for T
+where
+    E: FullError<&'a [u8], StompParseError>,
+    T: FnMut(&'a [u8]) -> IResult<&'a [u8], Header, E> + 'a,
+{
+}
 
 /// Creates an new HeadersParser accepting the specified required and optional Headers,
 /// and optionally arbitrary other headers as "custom" headers.
 pub fn headers_parser<'a, E>(
-    required: Vec<HeaderType<'a>>,
-    optional: Vec<HeaderType<'a>>,
+    required: Vec<HeaderType>,
+    optional: Vec<HeaderType>,
     allows_custom: bool,
-) -> Box<dyn Parser<&'a [u8], Vec<Header<'a>>, E> + 'a>
+) -> Box<dyn Parser<&'a [u8], Vec<Header>, E> + 'a>
 where
     E: 'a + FullError<&'a [u8], StompParseError>,
 {
@@ -36,10 +44,10 @@ where
 }
 
 fn init_headers_parser<'a, E>(
-    required: Vec<HeaderType<'a>>,
-    optional: Vec<HeaderType<'a>>,
+    required: Vec<HeaderType>,
+    optional: Vec<HeaderType>,
     allows_custom: bool,
-) -> Box<dyn Fn(&'a str) -> Box<HeaderParser<'a, E>> + 'a>
+) -> Box<dyn Fn(&'a str) -> Box<dyn HeaderParser<'a, E>> + 'a>
 where
     E: 'a + FullError<&'a [u8], StompParseError>,
 {
@@ -55,45 +63,54 @@ where
     })
 }
 
-fn init_known_header_parser<'a, E>(
-    required: Vec<HeaderType<'a>>,
-    optional: Vec<HeaderType<'a>>,
+fn find_header<'a, 'b, E>(
+    name: &'a str,
+    required: &'b Vec<HeaderType>,
+    optional: &'b Vec<HeaderType>,
     allows_custom: bool,
-) -> Box<
-    dyn Fn(
-            &'a str,
-        )
-            -> Result<Box<dyn FnMut(&'a [u8]) -> IResult<&'a [u8], Header, E> + 'a>, StompParseError>
-        + 'a,
->
+) -> Result<Box<dyn HeaderParser<'a, E> + 'a>, StompParseError>
+where
+    'a: 'b,
+    E: 'a + FullError<&'a [u8], StompParseError>,
+{
+    required
+        .iter()
+        .find(|header_type| header_type.matches(name))
+        .or_else(|| {
+            optional
+                .iter()
+                .find(|header_type| header_type.matches(name))
+        })
+        .map(|header_type| {
+            Ok(known_header_parser::<'a, E>(find_header_parser(
+                *header_type,
+            )))
+        })
+        .unwrap_or_else(|| {
+            if allows_custom {
+                Ok(known_header_parser::<'a, E>(Box::new(
+                    move |value: &str| {
+                        Ok(Header::Custom(CustomValue::new(
+                            unsafe { std::mem::transmute::<&'a str, &'static str>(name) },
+                            unsafe { std::mem::transmute::<&'_ str, &'static str>(value) },
+                        )))
+                    },
+                )))
+            } else {
+                Err(StompParseError::new(format!("Unknown header: {}", name)))
+            }
+        })
+}
+
+fn init_known_header_parser<'a, E>(
+    required: Vec<HeaderType>,
+    optional: Vec<HeaderType>,
+    allows_custom: bool,
+) -> impl Fn(&'a str) -> Result<Box<dyn HeaderParser<'a, E>>, StompParseError> + 'a
 where
     E: 'a + FullError<&'a [u8], StompParseError>,
 {
-    Box::new(move |name| {
-        required
-            .iter()
-            .find(|header_type| header_type.matches(name))
-            .or_else(|| {
-                optional
-                    .iter()
-                    .find(|header_type| header_type.matches(name))
-            })
-            .map(|header_type| {
-                Ok(known_header_parser::<'a, E>(find_header_parser(
-                    header_type,
-                )))
-            })
-            .unwrap_or_else(|| {
-                if allows_custom {
-                    Ok(known_header_parser::<'a, E>(find_header_parser(
-                        // This converts 'known-but-not-accepted' headers to custom ones
-                        &HeaderType::<'a>::Custom(name),
-                    )))
-                } else {
-                    Err(StompParseError::new(format!("Unknown header: {}", name)))
-                }
-            })
-    })
+    move |name: &'a str| find_header(name, &required, &optional, allows_custom)
 }
 
 fn header_section<'a, E: FullError<&'a [u8], StompParseError>>(
@@ -126,7 +143,7 @@ fn header_value<'a, E: FullError<&'a [u8], StompParseError>>(
 
 fn disallowed_header_parser<'a, E: 'a + FullError<&'a [u8], StompParseError>>(
     name: &'a str,
-) -> Box<HeaderParser<'a, E>> {
+) -> Box<dyn HeaderParser<'a, E>> {
     Box::new(map_res(header_value, move |_| {
         Err(StompParseError::new(format!(
             "Unexpected header '{}' encountered",
@@ -136,8 +153,8 @@ fn disallowed_header_parser<'a, E: 'a + FullError<&'a [u8], StompParseError>>(
 }
 
 fn known_header_parser<'a, E: 'a + FullError<&'a [u8], StompParseError>>(
-    parser: Box<dyn Fn(&'a str) -> Result<Header<'a>, StompParseError> + 'a>,
-) -> Box<HeaderParser<'a, E>> {
+    parser: Box<dyn Fn(&str) -> Result<Header, StompParseError> + 'a>,
+) -> Box<dyn HeaderParser<'a, E>> {
     Box::new(map_res(header_value, parser))
 }
 

@@ -2,80 +2,25 @@
 //! [STOMP Protocol Spezification,Version 1.2](https://stomp.github.io/stomp-specification-1.2.html).
 #[macro_use]
 mod macros;
+use crate::common::functions::decode_str;
 use crate::error::StompParseError;
 use either::Either;
 use paste::paste;
 use std::convert::TryFrom;
-use std::marker::PhantomData;
 use std::str::FromStr;
+
 /// A Header that reveals it's type and it's value, and can be displayed
-pub trait HeaderValue<'a>: std::fmt::Display {
+pub trait HeaderValue: std::fmt::Display {
     type OwnedValue;
     type Value;
     const OWNED: bool;
 
     fn header_name(&self) -> &str;
-    fn value(&'a self) -> Self::Value;
 }
 
-pub trait DecodableValue<'a> {
-    fn decoded_value(&'a self) -> Result<Either<&'a str, String>, StompParseError>;
+pub trait DecodableValue {
+    fn decoded_value(&self) -> Result<Either<&str, String>, StompParseError>;
 }
-
-pub fn decode_escape_sequence(slice: &str) -> Result<char, StompParseError> {
-    match slice {
-        "\\\\" => Ok('\\'),
-        "\\r" => Ok('\r'),
-        "\\n" => Ok('\n'),
-        "\\c" => Ok(':'),
-        _ => Err(StompParseError::new(format!(
-            "Unknown escape sequence: '{}'",
-            slice
-        ))),
-    }
-}
-
-pub fn decode_str(raw: &str) -> Result<Either<&str, String>, StompParseError> {
-    match raw.find('\\') {
-        None => Ok(Either::Left(raw)),
-        Some(index) => {
-            let mut buffer = String::with_capacity(raw.len());
-            decode_at_and_continue(&mut buffer, raw, index)?;
-            Ok(Either::Right(buffer))
-        }
-    }
-}
-
-fn decode_at_and_continue(
-    buffer: &mut String,
-    slice: &str,
-    index: usize,
-) -> Result<(), StompParseError> {
-    buffer.push_str(&slice[..index]);
-    if index < slice.len() - 1 {
-        buffer.push(decode_escape_sequence(&slice[index..index + 2])?);
-        decode_slice(buffer, &slice[index + 2..])
-    } else {
-        Err(StompParseError::new("input ends with control character \\"))
-    }
-}
-
-fn decode_slice(buffer: &mut String, slice: &str) -> Result<(), StompParseError> {
-    match slice.find('\\') {
-        None => {
-            buffer.push_str(slice);
-            Ok(())
-        }
-        Some(index) => decode_at_and_continue(buffer, slice, index),
-    }
-}
-
-impl<'a, T: HeaderValue<'a, Value = &'a str>> DecodableValue<'a> for T {
-    fn decoded_value(&'a self) -> Result<Either<&'a str, String>, StompParseError> {
-        decode_str(self.value())
-    }
-}
-
 #[derive(Eq, PartialEq, Debug, Clone)]
 pub struct NameValue {
     pub name: String,
@@ -299,12 +244,31 @@ headers!(
 
 #[cfg(test)]
 mod test {
+    use crate::common::functions::decode_str;
+    use crate::error::StompParseError;
     use crate::headers::{HeartBeatIntervalls, HeartBeatValue};
     use either::Either;
 
     use std::{fmt::Display, str::FromStr};
 
-    use super::{ContentLengthValue, DecodableValue, HeaderValue};
+    use super::{ContentLengthValue, DecodableValue, DestinationValue, HeaderValue};
+
+    fn do_something(value: &str) {
+        println!("Value: {}", value);
+    }
+
+    #[test]
+    fn header_value() {
+        let d = DestinationValue::new("Foo");
+
+        let value: &str = d.value();
+
+        do_something(value);
+
+        drop(d);
+
+        //        println!("Value: {}", value);
+    }
 
     #[test]
     fn header_value_display() {
@@ -338,27 +302,35 @@ mod test {
         assert_eq!(987, intervalls.expected);
     }
 
-    struct TestValue<'a> {
-        value: &'a str,
+    struct TestValue {
+        value: &'static str,
     }
 
-    impl Display for TestValue<'_> {
+    impl TestValue {
+        fn value(&self) -> &str {
+            self.value
+        }
+    }
+
+    impl DecodableValue for TestValue {
+        fn decoded_value(&self) -> Result<Either<&str, String>, StompParseError> {
+            decode_str(self.value())
+        }
+    }
+
+    impl Display for TestValue {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             f.write_fmt(format_args!("test:{}", self.value))
         }
     }
 
-    impl<'a> HeaderValue<'a> for TestValue<'a> {
-        type OwnedValue = &'a str;
-        type Value = &'a str;
+    impl HeaderValue for TestValue {
+        type OwnedValue = String;
+        type Value = &'static str;
         const OWNED: bool = false;
 
         fn header_name(&self) -> &str {
             todo!()
-        }
-
-        fn value(&'a self) -> Self::Value {
-            self.value
         }
     }
 
