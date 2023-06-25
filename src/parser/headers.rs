@@ -162,6 +162,7 @@ fn known_header_parser<'a, E: 'a + FullError<&'a [u8], StompParseError>>(
 mod tests {
     use either::Either;
     use nom::error::VerboseError;
+    use nom::error::dbg_dmp;
 
     use super::headers_parser;
     use crate::error::{FullError, StompParseError};
@@ -181,7 +182,7 @@ mod tests {
     fn headers<E: 'static + FullError<&'static [u8], StompParseError> + std::fmt::Debug>(
         input: &'static [u8],
     ) -> IResult<&'static [u8], Vec<Header>, E> {
-        nom::dbg_dmp(
+        dbg_dmp(
             |input| {
                 headers_parser(
                     Vec::new(),
@@ -203,7 +204,7 @@ mod tests {
     >(
         input: &'static [u8],
     ) -> IResult<&'static [u8], Vec<Header>, E> {
-        nom::dbg_dmp(
+        dbg_dmp(
             |input| {
                 headers_parser(
                     Vec::new(),
@@ -283,21 +284,21 @@ mod tests {
 
     #[test]
     fn header_with_cr_fails() {
-        let result = nom::dbg_dmp(header::<VerboseError<&[u8]>>, "header_line")(b"ab\rc:def\n");
+        let result = dbg_dmp(header::<VerboseError<&[u8]>>, "header_line")(b"ab\rc:def\n");
 
         assert!(result.is_err());
     }
 
     #[test]
     fn header_with_nl_fails() {
-        let result = nom::dbg_dmp(header::<VerboseError<&[u8]>>, "header_line")(b"ab\nc:def\n");
+        let result = dbg_dmp(header::<VerboseError<&[u8]>>, "header_line")(b"ab\nc:def\n");
 
         assert!(result.is_err());
     }
 
     #[test]
     fn header_with_colon_fails() {
-        let result = nom::dbg_dmp(header::<VerboseError<&[u8]>>, "header_line")(b"abc:d:ef\n");
+        let result = dbg_dmp(header::<VerboseError<&[u8]>>, "header_line")(b"abc:d:ef\n");
 
         assert!(result.is_err());
     }
@@ -344,7 +345,7 @@ mod tests {
 
     #[test]
     fn header_rejects_escaped_tab() {
-        let result = nom::dbg_dmp(header::<VerboseError<&[u8]>>, "header_line")(b"abc:d\\tef\n\n");
+        let result = dbg_dmp(header::<VerboseError<&[u8]>>, "header_line")(b"abc:d\\tef\n\n");
 
         assert!(result.is_err());
     }
@@ -362,7 +363,7 @@ mod tests {
 
     #[test]
     fn header_works_for_host() {
-        let header = nom::dbg_dmp(header::<VerboseError<&[u8]>>, "header_line")(b"host:d\\nef\n\n")
+        let header = dbg_dmp(header::<VerboseError<&[u8]>>, "header_line")(b"host:d\\nef\n\n")
             .unwrap()
             .1;
 
@@ -376,7 +377,7 @@ mod tests {
     #[test]
     fn header_works_for_heart_beat() {
         let header =
-            nom::dbg_dmp(header::<VerboseError<&[u8]>>, "header_line")(b"heart-beat:10,20\n\n")
+            dbg_dmp(header::<VerboseError<&[u8]>>, "header_line")(b"heart-beat:10,20\n\n")
                 .unwrap()
                 .1;
 
@@ -407,7 +408,7 @@ mod tests {
 
     #[test]
     fn headers_works_for_no_headers() {
-        let headers = nom::dbg_dmp(headers::<VerboseError<&[u8]>>, "headers")(b"\n\n")
+        let headers = dbg_dmp(headers::<VerboseError<&[u8]>>, "headers")(b"\n\n")
             .unwrap()
             .1;
 
@@ -417,7 +418,7 @@ mod tests {
     #[test]
     fn headers_works_for_single_header() {
         let headers =
-            nom::dbg_dmp(headers::<VerboseError<&[u8]>>, "headers")(b"heart-beat:10,20\n\n")
+            dbg_dmp(headers::<VerboseError<&[u8]>>, "headers")(b"heart-beat:10,20\n\n")
                 .unwrap()
                 .1;
 
@@ -433,7 +434,7 @@ mod tests {
 
     #[test]
     fn headers_works_for_multiple_headers() {
-        let headers = nom::dbg_dmp(headers::<VerboseError<&[u8]>>, "headers")(
+        let headers = dbg_dmp(headers::<VerboseError<&[u8]>>, "headers")(
             b"heart-beat:10,20\r\nabc:d\\nef\n\n",
         )
         .unwrap()
@@ -455,7 +456,7 @@ mod tests {
 
     #[test]
     fn headers_rejects_custom_when_disallowed() {
-        let result = nom::dbg_dmp(headers_no_custom::<VerboseError<&[u8]>>, "headers")(
+        let result = dbg_dmp(headers_no_custom::<VerboseError<&[u8]>>, "headers")(
             b"heart-beat:10,20\r\nabc:d\\nef\n\n",
         );
 
@@ -464,7 +465,7 @@ mod tests {
 
     #[test]
     fn headers_fails_when_no_empty_line() {
-        let headers = nom::dbg_dmp(headers::<VerboseError<&[u8]>>, "headers")(
+        let headers = dbg_dmp(headers::<VerboseError<&[u8]>>, "headers")(
             b"heart-beat:10,20\r\nabc:d\\nef\n",
         );
 

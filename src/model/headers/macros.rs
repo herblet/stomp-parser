@@ -9,7 +9,7 @@ macro_rules! header {
     ( $header:ident, $name:expr $(,$types:ty $(, $default:expr )?)? ) => {
         paste! {
 
-                #[derive(Debug, Eq, PartialEq, Clone)]
+                #[derive(Eq, PartialEq, Clone)]
                 pub struct [<$header Value>] {
                     value: or_else_type!($($types)?,&'static str),
                 }
@@ -74,6 +74,10 @@ macro_rules! header {
                 }
 
                 impl std::fmt::Display for [<$header Value>] {
+                    header_display!( );
+                }
+
+                impl std::fmt::Debug for [<$header Value>] {
                     header_display!( );
                 }
 

@@ -212,10 +212,10 @@ mod test {
             })
             .build();
 
-        let displayed = frame.to_string();
+        let displayed: Vec<u8> = frame.into();
 
         assert_eq!(
-            "CONNECTED\nversion:1.1\nheart-beat:20,10\n\n\u{00}",
+            b"CONNECTED\nversion:1.1\nheart-beat:20,10\n\n\x00".to_vec(),
             displayed
         );
     }
