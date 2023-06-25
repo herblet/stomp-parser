@@ -62,32 +62,31 @@ macro_rules! frame {
         }
 
         #[doc = "This implementation serialises [`"$name"`] into a byte array."]
-        impl TryInto<Vec<u8>> for $name {
-            type Error = StompParseError;
-
-            fn try_into(self) -> Result<Vec<u8>, Self::Error> {
-                {
-                    Ok::<Vec<u8>, std::io::Error>(self.raw)
-                }.map_err(StompParseError::from)
+        impl Into<Vec<u8>> for $name {
+            fn into(self) -> Vec<u8> {
+                self.raw
             }
         }
 
-        impl std::fmt::Display for $name {
+        impl std::fmt::Debug for $name {
              fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
-                writeln!(f, "{}", Self::NAME)?;
-                $( writeln!(f, "{}",  self.$header_name)?; )*
+                write!(f, "{}{{", Self::NAME)?;
+                $(
+                    write!(f, " {}: '{}', ", stringify!($header_name), self.$header_name.value())?;
+                )*
 
                 $($(
-                    choose_from_presence!($($opt_header_default)? { writeln!(f, "{}",  self.$opt_header_name)?; },{self.$opt_header_name.as_ref().map_or(Ok(()),|value| writeln!(f, "{}",  value))?;});
+                    write!(f, " {}: '{}', ", stringify!($opt_header_name),
+                    choose_from_presence!($( $opt_header_default )?
+                    {self.$opt_header_name.value().to_string() },
+                    { self.$opt_header_name.as_ref().map(|header|header.value().to_string()).unwrap_or("None".to_owned()) }))?;
                 )*)?
-                f.write_str("\n")?; // End of headers
                 $(
                     self.$has_body;
-                    self.body().map_or(Ok(()),|value| f.write_str(  unsafe {
-                        std::str::from_utf8_unchecked(value)
-                    }))?;
+                    write!(f, "body-length: {}", self.body().map(|body|body.len()).unwrap_or(0))?;
                 )?
-                f.write_str("\u{00}") // End of frame
+
+                f.write_str("}}\n")
             }
         }
 
@@ -189,10 +188,8 @@ macro_rules! frames {
         use crate::common::functions::*;
 
         use crate::error::StompParseError;
-        //use crate::model::frames::utils::*;
 
-        use std::convert::{TryFrom, TryInto};
-        //use std::io::Write;
+        use std::convert::TryFrom;
 
         paste::paste! {
             $(
@@ -220,19 +217,17 @@ macro_rules! frames {
             }
 
             #[doc = "This implementation serialises [`"$group_name Frame"`] into a byte array."]
-            impl TryInto<Vec<u8>> for [<$group_name Frame>] {
-                type Error = StompParseError;
-
-                fn try_into(self) -> Result<Vec<u8>, <Self as TryInto<Vec<u8>>>::Error> {
+            impl Into<Vec<u8>> for [<$group_name Frame>] {
+                fn into(self) -> Vec<u8> {
                     match self {
                         $(
-                            [<$group_name Frame>]::$name(frame) => frame.try_into(),
+                            [<$group_name Frame>]::$name(frame) => frame.into(),
                         )+
                     }
                 }
             }
 
-            impl std::fmt::Display for [<$group_name Frame>] {
+            impl std::fmt::Debug for [<$group_name Frame>] {
                 fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
                     match self {
                         $(
