@@ -161,8 +161,8 @@ fn known_header_parser<'a, E: 'a + FullError<&'a [u8], StompParseError>>(
 #[cfg(test)]
 mod tests {
     use either::Either;
-    use nom::error::VerboseError;
     use nom::error::dbg_dmp;
+    use nom::error::VerboseError;
 
     use super::headers_parser;
     use crate::error::{FullError, StompParseError};
@@ -376,10 +376,9 @@ mod tests {
 
     #[test]
     fn header_works_for_heart_beat() {
-        let header =
-            dbg_dmp(header::<VerboseError<&[u8]>>, "header_line")(b"heart-beat:10,20\n\n")
-                .unwrap()
-                .1;
+        let header = dbg_dmp(header::<VerboseError<&[u8]>>, "header_line")(b"heart-beat:10,20\n\n")
+            .unwrap()
+            .1;
 
         if let Header::HeartBeat(value) = header {
             assert_eq!(
@@ -417,10 +416,9 @@ mod tests {
 
     #[test]
     fn headers_works_for_single_header() {
-        let headers =
-            dbg_dmp(headers::<VerboseError<&[u8]>>, "headers")(b"heart-beat:10,20\n\n")
-                .unwrap()
-                .1;
+        let headers = dbg_dmp(headers::<VerboseError<&[u8]>>, "headers")(b"heart-beat:10,20\n\n")
+            .unwrap()
+            .1;
 
         assert_eq!(1, headers.len());
         assert_eq!(
@@ -465,9 +463,8 @@ mod tests {
 
     #[test]
     fn headers_fails_when_no_empty_line() {
-        let headers = dbg_dmp(headers::<VerboseError<&[u8]>>, "headers")(
-            b"heart-beat:10,20\r\nabc:d\\nef\n",
-        );
+        let headers =
+            dbg_dmp(headers::<VerboseError<&[u8]>>, "headers")(b"heart-beat:10,20\r\nabc:d\\nef\n");
 
         assert!(headers.is_err());
     }
