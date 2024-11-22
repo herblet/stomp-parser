@@ -112,7 +112,7 @@ pub mod client {
         )
     }
 
-    impl SendFrame {}
+    impl <'a> SendFrame<'a> {}
 }
 
 #[allow(non_snake_case)]
@@ -163,7 +163,7 @@ pub mod server {
         )
     }
 
-    impl ErrorFrame {
+    impl <'a> ErrorFrame<'a> {
         pub fn from_message(message: &str) -> Self {
             ErrorFrameBuilder::new().message(message.to_owned()).build()
         }
@@ -185,7 +185,7 @@ mod test {
     fn new_builder_can_be_build() {
         let frame = SendFrameBuilder::new("foo/bar".to_owned()).build();
 
-        assert_eq!("foo/bar", Into::<&str>::into(frame.destination));
+        assert_eq!("foo/bar", frame.destination().value());
     }
 
     #[test]
@@ -197,7 +197,7 @@ mod test {
         );
 
         if let Ok(ClientFrame::Connect(frame)) = result {
-            assert_eq!(StompVersion::V1_1, frame.accept_version.value().0[0])
+            assert_eq!(StompVersion::V1_1, frame.accept_version().value().0[0])
         } else {
             panic!("Expected a connect frame")
         }
@@ -321,28 +321,28 @@ mod test {
         expected_body: Option<&[u8]>,
     ) {
         assert_eq!(
-            frame.message_id.value(),
+            frame.message_id().value(),
             expected_id,
             "MessageId does not match"
         );
         assert_eq!(
-            frame.destination.value(),
+            frame.destination().value(),
             expected_dest,
             "Destination does not match"
         );
         assert_eq!(
-            frame.subscription.value(),
+            frame.subscription().value(),
             expected_sub,
             "Subscription does not match"
         );
         assert_eq!(
-            frame.content_type.as_ref().map(|value| value.value()),
+            frame.content_type().as_ref().map(|value| value.value()),
             expected_content_type,
             "content-type does not match"
         );
 
         assert_eq!(
-            frame.content_length.as_ref().map(|value| value.value()),
+            frame.content_length().as_ref().map(|value| value.value()),
             expected_content_length.as_ref(),
             "content-length does not match"
         );
@@ -427,7 +427,7 @@ mod test {
 
         if let Ok(ClientFrame::Send(frame)) = ClientFrame::try_from(message) {
             assert_in_range(source_ptr, source_len, frame.body().unwrap().as_ptr());
-            assert_in_range(source_ptr, source_len, frame.destination.value().as_ptr());
+            assert_in_range(source_ptr, source_len, frame.destination().value().as_ptr());
             assert_in_range(source_ptr, source_len, frame.custom[0].value().as_ptr());
             assert_in_range(
                 source_ptr,
@@ -458,7 +458,7 @@ mod test {
                     std::str::from_utf8(frame.body().unwrap()).unwrap()
                 );
 
-                assert_eq!("stairway/to/heaven", frame.destination.value());
+                assert_eq!("stairway/to/heaven", frame.destination().value());
                 return frame.body().unwrap().as_ptr() as u64;
             } else {
                 panic!("Send Frame not parsed correctly");

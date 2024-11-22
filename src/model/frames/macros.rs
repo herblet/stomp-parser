@@ -9,16 +9,16 @@ macro_rules! frame {
             #[doc = "This frame has required headers "$("`"$header_name"`")","* $(" and optional headers " $("`"$opt_header_name"`")","* )?"."]
             $(#[doc = ""]
             #[doc = ""$long_comment])?
-            pub struct $name {
+            pub struct $name<'a> {
                 raw: Vec<u8>,
             $(
                 #[doc = "The value of the `"$header_name"` header."]
-                pub $header_name: [<$header_type Value>],
+                $header_name: [<$header_type Value>]<'a>,
             )*
             $($(
                 #[doc = "The value of the `"$opt_header_name"` header."]
                 $($(#[doc = "Defaults to `"$opt_header_default_comment"` if not supplied."])?)?
-                pub $opt_header_name: choose_from_presence!($($opt_header_default)? ([<$opt_header_type Value>]),(Option<[<$opt_header_type Value>]>)),
+                $opt_header_name: choose_from_presence!($($opt_header_default)? ([<$opt_header_type Value>]<'a>),(Option<[<$opt_header_type Value>]<'a>>)),
             )*)?
             $(
                 #[allow(unused)]
@@ -27,15 +27,15 @@ macro_rules! frame {
             )?
             $(
                 #[allow(unused)]
-                $has_body: &'static [u8],
+                $has_body: &'a [u8],
             )?
         }
 
-        impl $name {
+        impl <'a> $name<'a> {
             pub const NAME: &'static str = stringify!($command);
         }
 
-        impl $name {
+        impl <'a> $name<'a> {
 
             fn init(raw: Vec<u8>) -> Self {
                 $name {
@@ -55,20 +55,34 @@ macro_rules! frame {
             }
         }
                 $(
-                pub fn body(&self) -> Option<&[u8]> {
+                pub fn body(&self) -> Option<&'a [u8]> {
                     Some(self.$has_body)
                 }
             )?
+
+            $(
+                #[doc = "The value of the `"$header_name"` header."]
+                pub fn $header_name(&'a self) -> &'a [<$header_type Value>]<'a> {
+                    &self.$header_name
+                }
+            )*
+            $($(
+                #[doc = "The value of the `"$opt_header_name"` header."]
+                $($(#[doc = "Defaults to `"$opt_header_default_comment"` if not supplied."])?)?
+                pub fn $opt_header_name(&'a self) -> choose_from_presence!($($opt_header_default)? (&'a [<$opt_header_type Value>]<'a>),(Option<&'a [<$opt_header_type Value>]<'a>>)) {
+                    choose_from_presence!($($opt_header_default)? (&self.$opt_header_name),(self.$opt_header_name.as_ref()))
+                }
+            )*)?
         }
 
         #[doc = "This implementation serialises [`"$name"`] into a byte array."]
-        impl Into<Vec<u8>> for $name {
+        impl <'a> Into<Vec<u8>> for $name<'a> {
             fn into(self) -> Vec<u8> {
                 self.raw
             }
         }
 
-        impl std::fmt::Debug for $name {
+        impl <'a> std::fmt::Debug for $name<'a> {
              fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
                 write!(f, "{}{{", Self::NAME)?;
                 $(
@@ -99,7 +113,7 @@ macro_rules! frame_parser {
         paste::paste! {
             #[allow(unused)]
             pub fn [<$name:lower _frame>]<E: 'static + FullError<&'static [u8], StompParseError>>(
-                mut frame: [<$name Frame>]
+                mut frame: [<$name Frame>]<'static>
             ) -> Result<[<$origin Frame>], StompParseError>{
 
                 let bytes : *const [u8] = frame.raw.as_slice();
@@ -212,7 +226,7 @@ macro_rules! frames {
             pub enum [<$group_name Frame>] {
                 $(
                     $(#[doc=$comment])?
-                    $name([<$name Frame>])
+                    $name([<$name Frame>]<'static>)
                 ),+
             }
 

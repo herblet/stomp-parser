@@ -10,10 +10,6 @@ use nom::{IResult, Needed};
 use crate::error::FullError;
 use crate::error::StompParseError;
 
-pub trait HasBody {
-    fn set_raw(&mut self, bytes: Vec<u8>);
-}
-
 pub fn null<'a, E: 'a + FullError<&'a [u8], StompParseError>>(
     input: &'a [u8],
 ) -> IResult<&[u8], &'a [u8], E> {
@@ -61,11 +57,11 @@ mod tests {
                         StompVersion::V1_2,
                         StompVersion::Unknown("funk".to_string())
                     ]),
-                    *frame.accept_version.value()
+                    *frame.accept_version().value()
                 );
-                assert_eq!("b", frame.host.value());
-                assert_eq!(None, frame.login);
-                assert_eq!(None, frame.passcode);
+                assert_eq!("b", frame.host().value());
+                assert_eq!(None, frame.login());
+                assert_eq!(None, frame.passcode());
             }
             _ => panic!("Not a Connect Frame!"),
         }
@@ -81,8 +77,8 @@ mod tests {
         );
         match frame.unwrap() {
             ClientFrame::Connect(frame) => {
-                assert_eq!("slarti", frame.login.as_ref().unwrap().value());
-                assert_eq!("bartfast", frame.passcode.as_ref().unwrap().value());
+                assert_eq!("slarti", frame.login().unwrap().value());
+                assert_eq!("bartfast", frame.passcode().unwrap().value());
             }
             _ => panic!("Not a Connect Frame!"),
         }
@@ -115,7 +111,7 @@ mod tests {
                     supplied: 10,
                     expected: 20,
                 },
-                *frame.heartbeat.value()
+                *frame.heartbeat().value()
             );
         } else {
             panic!("Not a connect frame!")
@@ -172,9 +168,9 @@ mod tests {
         .unwrap();
 
         if let ClientFrame::Subscribe(frame) = frame {
-            assert_eq!("y/b", frame.destination.value());
-            assert_eq!("1", frame.id.value());
-            assert_eq!(AckType::Client, *frame.ack_type.value())
+            assert_eq!("y/b", frame.destination().value());
+            assert_eq!("1", frame.id().value());
+            assert_eq!(AckType::Client, *frame.ack_type().value())
         } else {
             panic!("Not a SUBSCRIBE");
         }
@@ -204,7 +200,7 @@ mod tests {
         .unwrap();
 
         if let ClientFrame::Subscribe(frame) = frame {
-            assert_eq!(AckType::ClientIndividual, *frame.ack_type.value())
+            assert_eq!(AckType::ClientIndividual, *frame.ack_type().value())
         } else {
             panic!("Not a SUBSCRIBE");
         }
