@@ -248,7 +248,7 @@ mod tests {
             ClientFrame::try_from(b"ACK\nid:foo\ntransaction:trn-1\n\n\x00".to_vec()).unwrap();
 
         let ClientFrame::Ack(frame) = frame else {
-            panic!("Not a Connect Frame!")
+            panic!("Not a Ack Frame!")
         };
         assert_eq!("foo", frame.id().value());
         assert_eq!("trn-1", frame.transaction().value());
@@ -263,10 +263,119 @@ mod tests {
         .unwrap();
 
         let ClientFrame::Ack(frame) = frame else {
-            panic!("Not a Connect Frame!")
+            panic!("Not a Ack Frame!")
         };
         assert_eq!("foo", frame.id().value());
         assert_eq!("trn-1", frame.transaction().value());
+        assert_eq!("recpt-x", frame.receipt().unwrap().value());
+    }
+
+    #[test]
+    fn it_recognises_begin_frames() {
+        let frame = ClientFrame::try_from(b"BEGIN\ntransaction:trn-1\n\n\x00".to_vec()).unwrap();
+
+        let ClientFrame::Begin(frame) = frame else {
+            panic!("Not a Begin Frame!")
+        };
+        assert_eq!("trn-1", frame.transaction().value());
+        assert_eq!(None, frame.receipt());
+    }
+
+    #[test]
+    fn it_recognises_begin_frames_with_receipt() {
+        let frame =
+            ClientFrame::try_from(b"BEGIN\ntransaction:trn-1\nreceipt:recpt-x\n\n\x00".to_vec())
+                .unwrap();
+
+        let ClientFrame::Begin(frame) = frame else {
+            panic!("Not a Begin Frame!")
+        };
+        assert_eq!("trn-1", frame.transaction().value());
+        assert_eq!("recpt-x", frame.receipt().unwrap().value());
+    }
+
+    #[test]
+    fn it_recognises_commit_frames() {
+        let frame = ClientFrame::try_from(b"COMMIT\ntransaction:trn-1\n\n\x00".to_vec()).unwrap();
+
+        let ClientFrame::Commit(frame) = frame else {
+            panic!("Not a Commit Frame!")
+        };
+        assert_eq!("trn-1", frame.transaction().value());
+        assert_eq!(None, frame.receipt());
+    }
+
+    #[test]
+    fn it_recognises_commit_frames_with_receipt() {
+        let frame =
+            ClientFrame::try_from(b"COMMIT\ntransaction:trn-1\nreceipt:recpt-x\n\n\x00".to_vec())
+                .unwrap();
+
+        let ClientFrame::Commit(frame) = frame else {
+            panic!("Not a Commit Frame!")
+        };
+        assert_eq!("trn-1", frame.transaction().value());
+        assert_eq!("recpt-x", frame.receipt().unwrap().value());
+    }
+
+    #[test]
+    fn it_recognises_nack_frames_without_receipt() {
+        let frame =
+            ClientFrame::try_from(b"NACK\nid:foo\ntransaction:trn-1\n\n\x00".to_vec()).unwrap();
+
+        let ClientFrame::Nack(frame) = frame else {
+            panic!("Not a Nack Frame!")
+        };
+        assert_eq!("foo", frame.id().value());
+        assert_eq!("trn-1", frame.transaction().value());
+        assert_eq!(None, frame.receipt());
+    }
+
+    #[test]
+    fn it_recognises_nack_frames_with_receipt() {
+        let frame = ClientFrame::try_from(
+            b"NACK\nid:foo\ntransaction:trn-1\nreceipt:recpt-x\n\n\x00".to_vec(),
+        )
+        .unwrap();
+
+        let ClientFrame::Nack(frame) = frame else {
+            panic!("Not a Nack Frame!")
+        };
+        assert_eq!("foo", frame.id().value());
+        assert_eq!("trn-1", frame.transaction().value());
+        assert_eq!("recpt-x", frame.receipt().unwrap().value());
+    }
+
+    #[test]
+    fn it_recognises_disconnect_frames() {
+        let frame = ClientFrame::try_from(b"DISCONNECT\nreceipt:recpt-x\n\n\x00".to_vec()).unwrap();
+
+        let ClientFrame::Disconnect(frame) = frame else {
+            panic!("Not a Disconnect Frame!")
+        };
+        assert_eq!("recpt-x", frame.receipt().value());
+    }
+
+    #[test]
+    fn it_recognises_unsubscribe_frames() {
+        let frame = ClientFrame::try_from(b"UNSUBSCRIBE\nid:foo\n\n\x00".to_vec()).unwrap();
+
+        let ClientFrame::Unsubscribe(frame) = frame else {
+            panic!("Not a Unsubscribe Frame!")
+        };
+        assert_eq!("foo", frame.id().value());
+        assert_eq!(None, frame.receipt());
+    }
+
+    #[test]
+    fn it_recognises_unsubscribe_frames_with_receipt() {
+        let frame = ClientFrame::try_from(b"UNSUBSCRIBE\nid:foo\nreceipt:recpt-x\n\n\x00".to_vec())
+            .unwrap();
+
+        let ClientFrame::Unsubscribe(frame) = frame else {
+            panic!("Not a Unsubscribe Frame!")
+        };
+        assert_eq!("foo", frame.id().value());
         assert_eq!("recpt-x", frame.receipt().unwrap().value());
     }
 }

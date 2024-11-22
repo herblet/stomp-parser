@@ -204,6 +204,20 @@ mod test {
     }
 
     #[test]
+    fn builds_connected_frame() {
+        let frame = ConnectedFrameBuilder::new(StompVersion::V1_1)
+            .heartbeat(HeartBeatIntervalls {
+                supplied: 20,
+                expected: 10,
+            })
+            .build();
+
+        assert_eq!(StompVersion::V1_1, *(frame.version().value()));
+        assert_eq!(20, frame.heartbeat().unwrap().value().supplied);
+        assert_eq!(10, frame.heartbeat().unwrap().value().expected);
+    }
+
+    #[test]
     fn writes_connected_frame() {
         let frame = ConnectedFrameBuilder::new(StompVersion::V1_1)
             .heartbeat(HeartBeatIntervalls {
@@ -218,6 +232,13 @@ mod test {
             b"CONNECTED\nversion:1.1\nheart-beat:20,10\n\n\x00".to_vec(),
             displayed
         );
+    }
+
+    #[test]
+    fn builds_receipt_frame() {
+        let frame = ReceiptFrameBuilder::new("rcpt-1".to_owned()).build();
+
+        assert_eq!("rcpt-1", frame.receipt_id().value());
     }
 
     #[test]
