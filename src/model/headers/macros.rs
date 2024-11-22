@@ -29,9 +29,9 @@ macro_rules! header {
                     pub const NAME: &'static str =  $name;
 
                     pub(crate) fn new(value: or_else_type!($($types)?,&'a str)) -> Self {
-                        [<$header Value>] { 
+                        [<$header Value>] {
                             value,
-                            phantom: std::marker::PhantomData 
+                            phantom: std::marker::PhantomData
                         }
                     }
 

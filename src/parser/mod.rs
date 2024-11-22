@@ -231,4 +231,42 @@ mod tests {
             panic!("Not a send");
         }
     }
+
+    #[test]
+    fn it_recognises_abort_frames() {
+        let frame = ClientFrame::try_from(b"ABORT\ntransaction:trn-1\n\n\x00".to_vec()).unwrap();
+
+        let ClientFrame::Abort(frame) = frame else {
+            panic!("Not a Connect Frame!")
+        };
+        assert_eq!("trn-1", frame.transaction().value());
+    }
+
+    #[test]
+    fn it_recognises_ack_frames_without_receipt() {
+        let frame =
+            ClientFrame::try_from(b"ACK\nid:foo\ntransaction:trn-1\n\n\x00".to_vec()).unwrap();
+
+        let ClientFrame::Ack(frame) = frame else {
+            panic!("Not a Connect Frame!")
+        };
+        assert_eq!("foo", frame.id().value());
+        assert_eq!("trn-1", frame.transaction().value());
+        assert_eq!(None, frame.receipt());
+    }
+
+    #[test]
+    fn it_recognises_ack_frames_with_receipt() {
+        let frame = ClientFrame::try_from(
+            b"ACK\nid:foo\ntransaction:trn-1\nreceipt:recpt-x\n\n\x00".to_vec(),
+        )
+        .unwrap();
+
+        let ClientFrame::Ack(frame) = frame else {
+            panic!("Not a Connect Frame!")
+        };
+        assert_eq!("foo", frame.id().value());
+        assert_eq!("trn-1", frame.transaction().value());
+        assert_eq!("recpt-x", frame.receipt().unwrap().value());
+    }
 }

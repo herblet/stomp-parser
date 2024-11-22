@@ -112,7 +112,7 @@ pub mod client {
         )
     }
 
-    impl <'a> SendFrame<'a> {}
+    impl<'a> SendFrame<'a> {}
 }
 
 #[allow(non_snake_case)]
@@ -163,7 +163,7 @@ pub mod server {
         )
     }
 
-    impl <'a> ErrorFrame<'a> {
+    impl<'a> ErrorFrame<'a> {
         pub fn from_message(message: &str) -> Self {
             ErrorFrameBuilder::new().message(message.to_owned()).build()
         }
@@ -425,18 +425,18 @@ mod test {
         let source_ptr = message.as_ptr();
         let source_len = message.len();
 
-        if let Ok(ClientFrame::Send(frame)) = ClientFrame::try_from(message) {
-            assert_in_range(source_ptr, source_len, frame.body().unwrap().as_ptr());
-            assert_in_range(source_ptr, source_len, frame.destination().value().as_ptr());
-            assert_in_range(source_ptr, source_len, frame.custom[0].value().as_ptr());
-            assert_in_range(
-                source_ptr,
-                source_len,
-                frame.custom[0].header_name().as_ptr(),
-            );
-        } else {
-            panic!("Send Frame not parsed correctly");
-        }
+        let Ok(ClientFrame::Send(frame)) = ClientFrame::try_from(message) else {
+            panic!("Send Frame not parsed correctly")
+        };
+
+        assert_in_range(source_ptr, source_len, frame.body().unwrap().as_ptr());
+        assert_in_range(source_ptr, source_len, frame.destination().value().as_ptr());
+        assert_in_range(source_ptr, source_len, frame.custom[0].value().as_ptr());
+        assert_in_range(
+            source_ptr,
+            source_len,
+            frame.custom[0].header_name().as_ptr(),
+        );
     }
 
     #[test]
@@ -452,29 +452,29 @@ mod test {
         let parsed = ClientFrame::try_from(message);
 
         let handle = thread::spawn(move || {
-            if let Ok(ClientFrame::Send(frame)) = parsed {
-                assert_eq!(
-                    "Lorem ipsum dolor sit amet,...",
-                    std::str::from_utf8(frame.body().unwrap()).unwrap()
-                );
+            let Ok(ClientFrame::Send(frame)) = parsed else {
+                panic!("Send Frame not parsed correctly")
+            };
 
-                assert_eq!("stairway/to/heaven", frame.destination().value());
-                return frame.body().unwrap().as_ptr() as u64;
-            } else {
-                panic!("Send Frame not parsed correctly");
-            }
+            assert_eq!(
+                "Lorem ipsum dolor sit amet,...",
+                std::str::from_utf8(frame.body().unwrap()).unwrap()
+            );
+
+            assert_eq!("stairway/to/heaven", frame.destination().value());
+            return frame.body().unwrap().as_ptr() as u64;
         });
 
-        if let Ok(address) = handle.join() {
-            println!(
-                "Source: {}, Len: {}, Offset: {} ",
-                src_ptr,
-                len,
-                address - src_ptr,
-            );
-        } else {
+        let Ok(address) = handle.join() else {
             panic!("Error after move")
-        }
+        };
+
+        println!(
+            "Source: {}, Len: {}, Offset: {} ",
+            src_ptr,
+            len,
+            address - src_ptr,
+        );
     }
 
     #[test]
@@ -486,10 +486,10 @@ mod test {
             \x00"
             .to_vec();
 
-        if let Ok(ClientFrame::Send(frame)) = ClientFrame::try_from(message) {
-            assert_eq!(&[0u8, 1, 1, 2, 3, 5, 8, 13], frame.body().unwrap());
-        } else {
-            panic!("Send Frame not parsed correctly");
-        }
+        let Ok(ClientFrame::Send(frame)) = ClientFrame::try_from(message) else {
+            panic!("Send Frame not parsed correctly")
+        };
+
+        assert_eq!(&[0u8, 1, 1, 2, 3, 5, 8, 13], frame.body().unwrap());
     }
 }
