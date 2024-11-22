@@ -112,7 +112,7 @@ pub mod client {
         )
     }
 
-    impl SendFrame {}
+    impl<'a> SendFrame<'a> {}
 }
 
 #[allow(non_snake_case)]
@@ -163,7 +163,7 @@ pub mod server {
         )
     }
 
-    impl ErrorFrame {
+    impl<'a> ErrorFrame<'a> {
         pub fn from_message(message: &str) -> Self {
             ErrorFrameBuilder::new().message(message.to_owned()).build()
         }
@@ -185,7 +185,7 @@ mod test {
     fn new_builder_can_be_build() {
         let frame = SendFrameBuilder::new("foo/bar".to_owned()).build();
 
-        assert_eq!("foo/bar", Into::<&str>::into(frame.destination));
+        assert_eq!("foo/bar", frame.destination().value());
     }
 
     #[test]
@@ -197,10 +197,24 @@ mod test {
         );
 
         if let Ok(ClientFrame::Connect(frame)) = result {
-            assert_eq!(StompVersion::V1_1, frame.accept_version.value().0[0])
+            assert_eq!(StompVersion::V1_1, frame.accept_version().value().0[0])
         } else {
             panic!("Expected a connect frame")
         }
+    }
+
+    #[test]
+    fn builds_connected_frame() {
+        let frame = ConnectedFrameBuilder::new(StompVersion::V1_1)
+            .heartbeat(HeartBeatIntervalls {
+                supplied: 20,
+                expected: 10,
+            })
+            .build();
+
+        assert_eq!(StompVersion::V1_1, *(frame.version().value()));
+        assert_eq!(20, frame.heartbeat().unwrap().value().supplied);
+        assert_eq!(10, frame.heartbeat().unwrap().value().expected);
     }
 
     #[test]
@@ -218,6 +232,13 @@ mod test {
             b"CONNECTED\nversion:1.1\nheart-beat:20,10\n\n\x00".to_vec(),
             displayed
         );
+    }
+
+    #[test]
+    fn builds_receipt_frame() {
+        let frame = ReceiptFrameBuilder::new("rcpt-1".to_owned()).build();
+
+        assert_eq!("rcpt-1", frame.receipt_id().value());
     }
 
     #[test]
@@ -321,28 +342,28 @@ mod test {
         expected_body: Option<&[u8]>,
     ) {
         assert_eq!(
-            frame.message_id.value(),
+            frame.message_id().value(),
             expected_id,
             "MessageId does not match"
         );
         assert_eq!(
-            frame.destination.value(),
+            frame.destination().value(),
             expected_dest,
             "Destination does not match"
         );
         assert_eq!(
-            frame.subscription.value(),
+            frame.subscription().value(),
             expected_sub,
             "Subscription does not match"
         );
         assert_eq!(
-            frame.content_type.as_ref().map(|value| value.value()),
+            frame.content_type().as_ref().map(|value| value.value()),
             expected_content_type,
             "content-type does not match"
         );
 
         assert_eq!(
-            frame.content_length.as_ref().map(|value| value.value()),
+            frame.content_length().as_ref().map(|value| value.value()),
             expected_content_length.as_ref(),
             "content-length does not match"
         );
@@ -425,18 +446,18 @@ mod test {
         let source_ptr = message.as_ptr();
         let source_len = message.len();
 
-        if let Ok(ClientFrame::Send(frame)) = ClientFrame::try_from(message) {
-            assert_in_range(source_ptr, source_len, frame.body().unwrap().as_ptr());
-            assert_in_range(source_ptr, source_len, frame.destination.value().as_ptr());
-            assert_in_range(source_ptr, source_len, frame.custom[0].value().as_ptr());
-            assert_in_range(
-                source_ptr,
-                source_len,
-                frame.custom[0].header_name().as_ptr(),
-            );
-        } else {
-            panic!("Send Frame not parsed correctly");
-        }
+        let Ok(ClientFrame::Send(frame)) = ClientFrame::try_from(message) else {
+            panic!("Send Frame not parsed correctly")
+        };
+
+        assert_in_range(source_ptr, source_len, frame.body().unwrap().as_ptr());
+        assert_in_range(source_ptr, source_len, frame.destination().value().as_ptr());
+        assert_in_range(source_ptr, source_len, frame.custom[0].value().as_ptr());
+        assert_in_range(
+            source_ptr,
+            source_len,
+            frame.custom[0].header_name().as_ptr(),
+        );
     }
 
     #[test]
@@ -452,29 +473,29 @@ mod test {
         let parsed = ClientFrame::try_from(message);
 
         let handle = thread::spawn(move || {
-            if let Ok(ClientFrame::Send(frame)) = parsed {
-                assert_eq!(
-                    "Lorem ipsum dolor sit amet,...",
-                    std::str::from_utf8(frame.body().unwrap()).unwrap()
-                );
+            let Ok(ClientFrame::Send(frame)) = parsed else {
+                panic!("Send Frame not parsed correctly")
+            };
 
-                assert_eq!("stairway/to/heaven", frame.destination.value());
-                return frame.body().unwrap().as_ptr() as u64;
-            } else {
-                panic!("Send Frame not parsed correctly");
-            }
+            assert_eq!(
+                "Lorem ipsum dolor sit amet,...",
+                std::str::from_utf8(frame.body().unwrap()).unwrap()
+            );
+
+            assert_eq!("stairway/to/heaven", frame.destination().value());
+            return frame.body().unwrap().as_ptr() as u64;
         });
 
-        if let Ok(address) = handle.join() {
-            println!(
-                "Source: {}, Len: {}, Offset: {} ",
-                src_ptr,
-                len,
-                address - src_ptr,
-            );
-        } else {
+        let Ok(address) = handle.join() else {
             panic!("Error after move")
-        }
+        };
+
+        println!(
+            "Source: {}, Len: {}, Offset: {} ",
+            src_ptr,
+            len,
+            address - src_ptr,
+        );
     }
 
     #[test]
@@ -486,10 +507,10 @@ mod test {
             \x00"
             .to_vec();
 
-        if let Ok(ClientFrame::Send(frame)) = ClientFrame::try_from(message) {
-            assert_eq!(&[0u8, 1, 1, 2, 3, 5, 8, 13], frame.body().unwrap());
-        } else {
-            panic!("Send Frame not parsed correctly");
-        }
+        let Ok(ClientFrame::Send(frame)) = ClientFrame::try_from(message) else {
+            panic!("Send Frame not parsed correctly")
+        };
+
+        assert_eq!(&[0u8, 1, 1, 2, 3, 5, 8, 13], frame.body().unwrap());
     }
 }

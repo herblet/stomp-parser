@@ -10,24 +10,29 @@ macro_rules! header {
         paste! {
 
                 #[derive(Eq, PartialEq, Clone)]
-                pub struct [<$header Value>] {
-                    value: or_else_type!($($types)?,&'static str),
+                pub struct [<$header Value>]<'a> {
+                    value: or_else_type!($($types)?,&'a str),
+                    phantom: std::marker::PhantomData<&'a or_else_type!($($types)?, str)>,
                 }
 
-                impl Default for [<$header Value>] {
+                impl <'a> Default for [<$header Value>]<'a> {
                     fn default() -> Self {
                         [<$header Value>] {
                             value: or_else!($($($default)?)?,EMPTY),
+                            phantom: std::marker::PhantomData
                         }
                     }
                 }
 
-                 impl [<$header Value>] {
+                 impl <'a> [<$header Value>]<'a> {
 
                     pub const NAME: &'static str =  $name;
 
-                    pub(crate) fn new(value: or_else_type!($($types)?,&'static str)) -> Self {
-                        [<$header Value>] { value }
+                    pub(crate) fn new(value: or_else_type!($($types)?,&'a str)) -> Self {
+                        [<$header Value>] {
+                            value,
+                            phantom: std::marker::PhantomData
+                        }
                     }
 
                     pub(crate) fn from_owned(_value: or_else_type!($($types)?,String)) -> Self {
@@ -38,10 +43,10 @@ macro_rules! header {
                         })
                     }
 
-                    pub(crate) fn from_str<'a>(input: &'a str) -> Result<[<$header Value>], StompParseError> {
+                    pub(crate) fn from_str<'b>(input: &'b str) -> Result<[<$header Value>]<'b>, StompParseError> {
                         choose_from_presence!($($types)? ($($types)?::from_str(input).map([<$header Value>]::new)
                             .map_err(|_| StompParseError::new("[<Error Parsing $header Value>]"))), (Ok([<$header Value>]::new(
-                                unsafe { std::mem::transmute::<&'a str,&'static str>(input)}
+                                input
                             ))))
                     }
 
@@ -50,14 +55,14 @@ macro_rules! header {
                     }
                 }
 
-                if_not_present!($($types)? (impl DecodableValue for [<$header Value>] {
+                if_not_present!($($types)? (impl <'a> DecodableValue for [<$header Value>]<'a> {
                         fn decoded_value(&self) -> Result<Either<&str, String>, StompParseError> {
                             decode_str(self.value())
                         }
                     }
                 ));
 
-                impl  HeaderValue  for [<$header Value>] {
+                impl <'a> HeaderValue  for [<$header Value>]<'a> {
                     type OwnedValue = or_else_type!($($types)?,String);
                     type Value=or_else_type!($($types)?,&'static str);
                     const OWNED: bool = choose_from_presence!($($types)? true, false);
@@ -67,17 +72,17 @@ macro_rules! header {
                     }
                 }
 
-                impl  Into<or_else_type!($($types)?,&str)> for [<$header Value>] {
-                    fn into(self) -> or_else_type!($($types)?,&'static str) {
+                impl  <'a> Into<or_else_type!($($types)?,&'a str)> for [<$header Value>]<'a> {
+                    fn into(self) -> or_else_type!($($types)?,&'a str) {
                         self.value
                     }
                 }
 
-                impl std::fmt::Display for [<$header Value>] {
+                impl <'a> std::fmt::Display for [<$header Value>]<'a> {
                     header_display!( );
                 }
 
-                impl std::fmt::Debug for [<$header Value>] {
+                impl <'a> std::fmt::Debug for [<$header Value>]<'a> {
                     header_display!( );
                 }
 
@@ -180,9 +185,9 @@ macro_rules! headers {
             )*
 
                 #[derive(Debug, Eq, PartialEq, Clone)]
-                pub enum Header {
+                pub enum Header<'a> {
                     $(
-                    $header([<$header Value>]),
+                    $header([<$header Value>]<'a>),
                     )*
                     Custom(CustomValue)
                 }

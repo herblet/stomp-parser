@@ -31,7 +31,7 @@ pub fn headers_parser<'a, E>(
     required: Vec<HeaderType>,
     optional: Vec<HeaderType>,
     allows_custom: bool,
-) -> Box<dyn Parser<&'a [u8], Vec<Header>, E> + 'a>
+) -> Box<dyn Parser<&'a [u8], Vec<Header<'a>>, E> + 'a>
 where
     E: 'a + FullError<&'a [u8], StompParseError>,
 {

@@ -9,10 +9,10 @@ macro_rules! sender_frame {
             #[doc = ""$long_comment])?
             pub struct [<$name Builder>] {
                 $(
-                    $header_name: <[<$header_type Value>] as HeaderValue>::OwnedValue,
+                    $header_name: <[<$header_type Value>]<'static> as HeaderValue>::OwnedValue,
                 )*
                 $($(
-                    $opt_header_name: Option<<[<$opt_header_type Value>] as HeaderValue>::OwnedValue>,
+                    $opt_header_name: Option<<[<$opt_header_type Value>]<'static> as HeaderValue>::OwnedValue>,
                 )*)?
                 $(
                     #[doc(hidden)]
@@ -52,7 +52,7 @@ macro_rules! sender_frame {
                 )?
 
                 pub fn new($(
-                            $header_name: <[<$header_type Value>] as HeaderValue>::OwnedValue,
+                            $header_name: <[<$header_type Value>]<'static> as HeaderValue>::OwnedValue,
                         )*) -> [<$name Builder>] {
                     [<$name Builder>] {
                         $(
@@ -71,7 +71,7 @@ macro_rules! sender_frame {
                 }
 
                 #[allow(unused_mut)]
-                pub fn build(mut self) -> $name {
+                pub fn build(mut self) -> $name<'static> {
                     // First, build the byte array
                     let mut bytes : Vec<u8> = Vec::with_capacity(1000);
                     let bytes_ref = &mut bytes;

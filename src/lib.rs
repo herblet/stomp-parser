@@ -18,7 +18,7 @@
 //!                 .to_vec();
 //!
 //! if let Ok(ClientFrame::Send(frame)) = ClientFrame::try_from(message) {
-//!     assert_eq!("stairway/to/heaven", frame.destination.value());
+//!     assert_eq!("stairway/to/heaven", frame.destination().value());
 //!     assert_eq!(b"Lorem ipsum dolor sit amet,...", frame.body().unwrap());
 //! } else {
 //!     panic!("Send Frame not parsed correctly");
