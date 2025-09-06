@@ -184,6 +184,7 @@ mod test {
     use crate::model::headers::*;
     use std::convert::TryFrom;
     use std::convert::TryInto;
+    use std::str::FromStr;
     use std::thread;
 
     #[test]
@@ -206,6 +207,40 @@ mod test {
         } else {
             panic!("Expected a connect frame")
         }
+    }
+
+    #[test]
+    fn parses_connect_with_custom_headers() {
+        let result = ClientFrame::try_from(
+            "CONNECT\nhost:foo\naccept-version:1.1\nheart-beat:10,20\nfoo:bar\n\n\u{00}"
+                .as_bytes()
+                .to_owned(),
+        );
+
+        if let Ok(ClientFrame::Connect(frame)) = result {
+            assert_eq!(1, frame.custom.len());
+            assert_eq!("foo", frame.custom[0].header_name());
+            assert_eq!("bar", frame.custom[0].value().to_owned());
+        } else {
+            panic!("Expected a connect frame")
+        }
+    }
+
+    #[test]
+    fn writes_connect_with_custom_headers() {
+        let frame = ConnectFrameBuilder::new(
+            "foo".to_owned(),
+            StompVersions::from_str("1.1,1.2").unwrap(),
+        )
+        .add_custom_header("foo".to_owned(), "bar".to_owned())
+        .build();
+
+        let displayed = String::from_utf8(frame.into()).unwrap();
+
+        assert_eq!(
+            "CONNECT\nhost:foo\naccept-version:1.1,1.2\nheart-beat:0,0\nfoo:bar\n\n\x00",
+            displayed
+        );
     }
 
     #[test]
