@@ -208,7 +208,7 @@ macro_rules! headers {
                     }
 
                     $(
-                        pub fn [<parse_ $header _header>]<'a>(input: &'a str) -> Result<Header, StompParseError> {
+                        pub fn [<parse_ $header _header>](input: &str) -> Result<Header<'_>, StompParseError> {
                             [<$header Value>]::from_str(input).map(Header::$header)
                         }
                     )*
