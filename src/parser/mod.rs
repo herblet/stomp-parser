@@ -38,7 +38,7 @@ pub fn remaining_without_null<'a, E: FullError<&'a [u8], StompParseError>>(
 #[cfg(test)]
 mod tests {
     use crate::client::ClientFrame;
-    use crate::headers::{AckType, HeartBeatIntervalls, StompVersion, StompVersions};
+    use crate::headers::{AckType, HeartBeatIntervals, StompVersion, StompVersions};
     use std::convert::TryFrom;
 
     #[test]
@@ -107,7 +107,7 @@ mod tests {
         .unwrap();
         if let ClientFrame::Connect(frame) = frame {
             assert_eq!(
-                HeartBeatIntervalls {
+                HeartBeatIntervals {
                     supplied: 10,
                     expected: 20,
                 },
