@@ -12,7 +12,7 @@ use crate::error::StompParseError;
 
 pub fn null<'a, E: 'a + FullError<&'a [u8], StompParseError>>(
     input: &'a [u8],
-) -> IResult<&[u8], &'a [u8], E> {
+) -> IResult<&'a [u8], &'a [u8], E> {
     terminated(
         context("Null Octet", char('\x00')),
         context("Data after null", eof),
@@ -22,7 +22,7 @@ pub fn null<'a, E: 'a + FullError<&'a [u8], StompParseError>>(
 
 pub fn command_line<'a, E: FullError<&'a [u8], E2>, E2>(
     input: &'a [u8],
-) -> IResult<&[u8], &'a [u8], E> {
+) -> IResult<&'a [u8], &'a [u8], E> {
     terminated(is_not("\r\n"), line_ending)(input)
 }
 
@@ -38,7 +38,7 @@ pub fn remaining_without_null<'a, E: FullError<&'a [u8], StompParseError>>(
 #[cfg(test)]
 mod tests {
     use crate::client::ClientFrame;
-    use crate::headers::{AckType, HeartBeatIntervalls, StompVersion, StompVersions};
+    use crate::headers::{AckType, HeartBeatIntervals, StompVersion, StompVersions};
     use std::convert::TryFrom;
 
     #[test]
@@ -107,7 +107,7 @@ mod tests {
         .unwrap();
         if let ClientFrame::Connect(frame) = frame {
             assert_eq!(
-                HeartBeatIntervalls {
+                HeartBeatIntervals {
                     supplied: 10,
                     expected: 20,
                 },

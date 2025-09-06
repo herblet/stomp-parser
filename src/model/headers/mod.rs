@@ -54,34 +54,34 @@ impl FromStr for NameValue {
 /// A pair of numbers which specify at what intervall the originator of
 /// the containing message will supply a heartbeat and expect a heartbeat.
 #[derive(Eq, PartialEq, Debug, Clone, Default)]
-pub struct HeartBeatIntervalls {
+pub struct HeartBeatIntervals {
     pub supplied: u32,
     pub expected: u32,
 }
 
-impl HeartBeatIntervalls {
-    pub fn new(supplied: u32, expected: u32) -> HeartBeatIntervalls {
-        HeartBeatIntervalls { expected, supplied }
+impl HeartBeatIntervals {
+    pub fn new(supplied: u32, expected: u32) -> HeartBeatIntervals {
+        HeartBeatIntervals { expected, supplied }
     }
 }
 
-impl std::fmt::Display for HeartBeatIntervalls {
+impl std::fmt::Display for HeartBeatIntervals {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
         write!(f, "{},{}", &self.supplied, &self.expected)
     }
 }
 
-impl FromStr for HeartBeatIntervalls {
+impl FromStr for HeartBeatIntervals {
     type Err = StompParseError;
     /// Parses the string message as two ints representing "supplied, expected" heartbeat intervalls
-    fn from_str(input: &str) -> Result<HeartBeatIntervalls, StompParseError> {
+    fn from_str(input: &str) -> Result<HeartBeatIntervals, StompParseError> {
         split_once(input, ',')
             .ok_or_else(|| StompParseError::new(format!("Poorly formatted heartbeats: {}", input)))
             .and_then(|(supplied, expected)| {
                 u32::from_str(expected)
                     .and_then(|expected| {
                         u32::from_str(supplied)
-                            .map(|supplied| HeartBeatIntervalls { expected, supplied })
+                            .map(|supplied| HeartBeatIntervals { expected, supplied })
                     })
                     .map_err(|_| {
                         StompParseError::new(format!("Poorly formatted heartbeats: {}", input))
@@ -224,8 +224,8 @@ headers!(
     (
         HeartBeat,
         "heart-beat",
-        HeartBeatIntervalls,
-        (HeartBeatIntervalls::new(0, 0))
+        HeartBeatIntervals,
+        (HeartBeatIntervals::new(0, 0))
     ),
     (Host, "host"),
     (Id, "id"),
@@ -246,7 +246,7 @@ headers!(
 mod test {
     use crate::common::functions::decode_str;
     use crate::error::StompParseError;
-    use crate::headers::{HeartBeatIntervalls, HeartBeatValue};
+    use crate::headers::{HeartBeatIntervals, HeartBeatValue};
     use either::Either;
 
     use std::{fmt::Display, str::FromStr};
@@ -279,7 +279,7 @@ mod test {
 
     #[test]
     fn heartbeat_reads_supplied_then_expected() {
-        let hb = HeartBeatIntervalls::from_str("100,200").expect("Heartbeat parse failed");
+        let hb = HeartBeatIntervals::from_str("100,200").expect("Heartbeat parse failed");
 
         assert_eq!(100, hb.supplied);
         assert_eq!(200, hb.expected);
@@ -287,16 +287,16 @@ mod test {
 
     #[test]
     fn heartbeat_writes_supplied_then_expected() {
-        let hb = HeartBeatIntervalls::new(500, 300);
+        let hb = HeartBeatIntervals::new(500, 300);
 
         assert_eq!("500,300", hb.to_string());
     }
 
     #[test]
     fn heartbeat_into_intervalls() {
-        let hb = HeartBeatValue::new(HeartBeatIntervalls::new(123, 987));
+        let hb = HeartBeatValue::new(HeartBeatIntervals::new(123, 987));
 
-        let intervalls: HeartBeatIntervalls = hb.into();
+        let intervalls: HeartBeatIntervals = hb.into();
 
         assert_eq!(123, intervalls.supplied);
         assert_eq!(987, intervalls.expected);

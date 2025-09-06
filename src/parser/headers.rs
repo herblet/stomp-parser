@@ -172,7 +172,7 @@ mod tests {
 
     fn header<E: 'static + FullError<&'static [u8], StompParseError> + std::fmt::Debug>(
         input: &'static [u8],
-    ) -> IResult<&'static [u8], Header, E> {
+    ) -> IResult<&'static [u8], Header<'static>, E> {
         headers(input).map(|x| {
             let bytes = x.0;
             let mut vec = x.1;
@@ -181,7 +181,7 @@ mod tests {
     }
     fn headers<E: 'static + FullError<&'static [u8], StompParseError> + std::fmt::Debug>(
         input: &'static [u8],
-    ) -> IResult<&'static [u8], Vec<Header>, E> {
+    ) -> IResult<&'static [u8], Vec<Header<'static>>, E> {
         dbg_dmp(
             |input| {
                 headers_parser(
@@ -203,7 +203,7 @@ mod tests {
         E: 'static + FullError<&'static [u8], StompParseError> + std::fmt::Debug,
     >(
         input: &'static [u8],
-    ) -> IResult<&'static [u8], Vec<Header>, E> {
+    ) -> IResult<&'static [u8], Vec<Header<'static>>, E> {
         dbg_dmp(
             |input| {
                 headers_parser(
@@ -382,7 +382,7 @@ mod tests {
 
         if let Header::HeartBeat(value) = header {
             assert_eq!(
-                HeartBeatIntervalls {
+                HeartBeatIntervals {
                     supplied: 10,
                     expected: 20,
                 },
@@ -422,7 +422,7 @@ mod tests {
 
         assert_eq!(1, headers.len());
         assert_eq!(
-            Header::HeartBeat(HeartBeatValue::new(HeartBeatIntervalls {
+            Header::HeartBeat(HeartBeatValue::new(HeartBeatIntervals {
                 supplied: 10,
                 expected: 20,
             })),
@@ -440,7 +440,7 @@ mod tests {
 
         assert_eq!(2, headers.len());
         assert_eq!(
-            Header::HeartBeat(HeartBeatValue::new(HeartBeatIntervalls {
+            Header::HeartBeat(HeartBeatValue::new(HeartBeatIntervals {
                 supplied: 10,
                 expected: 20,
             })),

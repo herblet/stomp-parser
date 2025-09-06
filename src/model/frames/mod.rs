@@ -55,7 +55,12 @@ pub mod client {
             Client,
             host: Host,
             accept_version: AcceptVersion,
-            (heartbeat: HeartBeat: (||HeartBeatValue::new(HeartBeatIntervalls::new(0,0))):"(0,0)",login: Login, passcode: Passcode),
+            (
+                heartbeat: HeartBeat: (||HeartBeatValue::new(HeartBeatIntervals::new(0,0))):"(0,0)",
+                login: Login,
+                passcode: Passcode
+            ),
+            [custom: cus],
             "See [CONNECT Frame](https://stomp.github.io/stomp-specification-1.2.html#CONNECT_or_STOMP_Frame)."
         ),
         (
@@ -206,7 +211,7 @@ mod test {
     #[test]
     fn builds_connected_frame() {
         let frame = ConnectedFrameBuilder::new(StompVersion::V1_1)
-            .heartbeat(HeartBeatIntervalls {
+            .heartbeat(HeartBeatIntervals {
                 supplied: 20,
                 expected: 10,
             })
@@ -220,7 +225,7 @@ mod test {
     #[test]
     fn writes_connected_frame() {
         let frame = ConnectedFrameBuilder::new(StompVersion::V1_1)
-            .heartbeat(HeartBeatIntervalls {
+            .heartbeat(HeartBeatIntervals {
                 supplied: 20,
                 expected: 10,
             })

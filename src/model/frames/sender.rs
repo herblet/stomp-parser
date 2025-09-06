@@ -16,12 +16,12 @@ macro_rules! sender_frame {
                 )*)?
                 $(
                     #[doc(hidden)]
-                    #[doc = "Useseless doc: `"$has_custom"`."]
+                    #[doc = "Useless doc: `"$has_custom"`."]
                     custom: Vec<(String, String)>,
                 )?
                 $(
                     #[doc(hidden)]
-                    #[doc = "Useseless doc: `"$has_body"`."]
+                    #[doc = "Useless doc: `"$has_body"`."]
                     body: Option<Vec<u8>>,
                 )?
             }
@@ -37,14 +37,14 @@ macro_rules! sender_frame {
                     }
                 )*)?
                 $(
-                    #[doc = "Useseless doc: `"$has_custom"`."]
+                    #[doc = "Useless doc: `"$has_custom"`."]
                     pub fn add_custom_header(mut self, name: String, value: String) -> [<$name Builder>] {
                         self.custom.push((name, value));
                         self
                     }
                 )?
                 $(
-                    #[doc = "Useseless doc: `"$has_body"`."]
+                    #[doc = "Useless doc: `"$has_body"`."]
                     pub fn body(mut self, new_value: Vec<u8>) -> [<$name Builder>] {
                         self.body = Some(new_value);
                         self
